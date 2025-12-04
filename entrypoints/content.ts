@@ -82,21 +82,44 @@ export default defineContentScript({
         border-bottom: 1px solid #333;
       }
 
-      .bma-summary {
+      .bma-stats-section {
+        margin-bottom: 10px;
+      }
+
+      .bma-stats-title {
+        font-size: 10px;
+        color: #666;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 6px;
+      }
+
+      .bma-stats-row {
         display: flex;
         flex-wrap: wrap;
-        gap: 6px;
-        align-items: center;
+        gap: 4px;
       }
 
       .bma-stat {
         display: inline-flex;
         align-items: center;
         gap: 4px;
-        padding: 3px 8px;
+        padding: 4px 8px;
         background: #1a1a1a;
         border: 1px solid #333;
         font-size: 11px;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+
+      .bma-stat:hover {
+        background: #252525;
+        border-color: #444;
+      }
+
+      .bma-stat.active {
+        border-color: #666;
+        background: #2a2a2a;
       }
 
       .bma-stat-value {
@@ -107,11 +130,33 @@ export default defineContentScript({
         color: #999;
       }
 
-      .bma-stat.active .bma-stat-value { color: #6c6; }
-      .bma-stat.split-up .bma-stat-value { color: #c66; }
-      .bma-stat.on-hold .bma-stat-value { color: #cc6; }
-      .bma-stat.changed-name .bma-stat-value { color: #69c; }
-      .bma-stat.unknown .bma-stat-value { color: #888; }
+      /* Status colors */
+      .bma-stat[data-status="active"] .bma-stat-value { color: #6c6; }
+      .bma-stat[data-status="active"].active { border-color: #6c6; background: #1a2a1a; }
+      .bma-stat[data-status="split-up"] .bma-stat-value { color: #c66; }
+      .bma-stat[data-status="split-up"].active { border-color: #c66; background: #2a1a1a; }
+      .bma-stat[data-status="on-hold"] .bma-stat-value { color: #cc6; }
+      .bma-stat[data-status="on-hold"].active { border-color: #cc6; background: #2a2a1a; }
+      .bma-stat[data-status="changed-name"] .bma-stat-value { color: #69c; }
+      .bma-stat[data-status="changed-name"].active { border-color: #69c; background: #1a2a3a; }
+      .bma-stat[data-status="unknown"] .bma-stat-value { color: #888; }
+      .bma-stat[data-status="unknown"].active { border-color: #888; background: #222; }
+
+      /* Genre colors */
+      .bma-stat[data-genre] .bma-stat-value { color: #c9a; }
+      .bma-stat[data-genre].active { border-color: #c9a; background: #2a1a2a; }
+
+      /* Location colors */
+      .bma-stat[data-location] .bma-stat-value { color: #9ac; }
+      .bma-stat[data-location].active { border-color: #9ac; background: #1a2a2a; }
+
+      .bma-stat.total {
+        cursor: default;
+      }
+      .bma-stat.total:hover {
+        background: #1a1a1a;
+        border-color: #333;
+      }
       .bma-stat.total .bma-stat-value { color: #fff; }
 
       .bma-loading {
@@ -125,7 +170,7 @@ export default defineContentScript({
         align-items: center;
         gap: 10px;
         flex-wrap: wrap;
-        padding-top: 8px;
+        padding-top: 10px;
         border-top: 1px solid #333;
       }
 
@@ -133,9 +178,9 @@ export default defineContentScript({
         background: #1a1a1a;
         border: 1px solid #444;
         color: #ddd;
-        padding: 4px 8px;
-        font-size: 11px;
-        width: 200px;
+        padding: 6px 10px;
+        font-size: 12px;
+        width: 250px;
       }
 
       .bma-filter-input:focus {
@@ -148,131 +193,10 @@ export default defineContentScript({
         color: #666;
       }
 
-      .bma-filter-tags {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-      }
-
-      .bma-tag {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        padding: 2px 6px;
-        background: #333;
-        border: 1px solid #444;
-        color: #ccc;
-        font-size: 10px;
-        cursor: pointer;
-      }
-
-      .bma-tag:hover {
-        background: #444;
-        color: #fff;
-      }
-
-      .bma-tag.active {
-        background: #2a4a2a;
-        border-color: #4a6a4a;
-        color: #6c6;
-      }
-
       .bma-filter-count {
         color: #888;
         font-size: 11px;
         margin-left: auto;
-      }
-
-      .bma-locations {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-        padding-top: 8px;
-        border-top: 1px solid #333;
-      }
-
-      .bma-locations-title {
-        font-size: 10px;
-        color: #666;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        width: 100%;
-        margin-bottom: 2px;
-      }
-
-      .bma-location {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        padding: 2px 6px;
-        background: #1a1a1a;
-        border: 1px solid #333;
-        font-size: 10px;
-        color: #aaa;
-        cursor: pointer;
-        transition: all 0.15s;
-      }
-
-      .bma-location:hover {
-        background: #252525;
-        border-color: #444;
-        color: #fff;
-      }
-
-      .bma-location.active {
-        background: #2a2a3a;
-        border-color: #69c;
-        color: #fff;
-      }
-
-      .bma-location-count {
-        color: #666;
-      }
-
-      .bma-genres {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-        padding-top: 8px;
-        border-top: 1px solid #333;
-      }
-
-      .bma-genres-title {
-        font-size: 10px;
-        color: #666;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        width: 100%;
-        margin-bottom: 2px;
-      }
-
-      .bma-genre {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        padding: 2px 6px;
-        background: #1a1a1a;
-        border: 1px solid #333;
-        font-size: 10px;
-        color: #c9a;
-        cursor: pointer;
-        transition: all 0.15s;
-      }
-
-      .bma-genre:hover {
-        background: #252525;
-        border-color: #444;
-        color: #ebc;
-      }
-
-      .bma-genre.active {
-        background: #3a2a3a;
-        border-color: #c9a;
-        color: #ebc;
-      }
-
-      .bma-genre-count {
-        color: #666;
       }
 
       /* Band hover preview */
@@ -447,29 +371,6 @@ export default defineContentScript({
         padding: 12px;
       }
 
-      /* Table links */
-      .bma-table-link {
-        display: inline-block;
-        font-size: 14px;
-        text-decoration: none;
-        margin-right: 4px;
-        opacity: 0.8;
-        transition: opacity 0.15s;
-      }
-
-      .bma-table-link:hover {
-        opacity: 1;
-      }
-
-      .bma-links-loading {
-        color: #666;
-        font-size: 11px;
-      }
-
-      .bma-links-cell {
-        white-space: nowrap;
-      }
-
       /* Custom results container */
       .bma-results-container {
         display: none;
@@ -558,22 +459,13 @@ export default defineContentScript({
   },
 });
 
-interface BandTableLink {
-  name: string;
-  url: string;
-  icon: string;
-}
-
 interface BandData {
   name: string;
   nameHtml: string;
-  bandUrl: string;
   genre: string;
   location: string;
   status: string;
   statusNormalized: string;
-  links?: BandTableLink[];
-  linksFetched?: boolean;
 }
 
 interface StatusCounts {
@@ -591,8 +483,8 @@ const appState = {
   filteredBands: [] as BandData[],
   filterText: '',
   filterStatuses: new Set<string>(),
-  filterGenre: '' as string,
-  filterLocation: '' as string,
+  filterGenres: new Set<string>(),
+  filterLocations: new Set<string>(),
   currentPage: 0,
   pageSize: 100,
   isFiltering: false,
@@ -624,14 +516,11 @@ async function fetchAllBands(countryCode: string, onProgress?: (loaded: number, 
     for (const row of data.aaData) {
       const nameMatch = row[0].match(/>([^<]+)</);
       const name = nameMatch ? nameMatch[1] : row[0];
-      const urlMatch = row[0].match(/href="([^"]+)"/);
-      const bandUrl = urlMatch ? urlMatch[1] : '';
       const status = row[3];
 
       bands.push({
         name,
         nameHtml: row[0],
-        bandUrl,
         genre: row[1],
         location: row[2],
         status,
@@ -672,9 +561,10 @@ function getTopLocations(bands: BandData[], limit = 10): Array<{ location: strin
   const locationCounts = new Map<string, number>();
 
   for (const band of bands) {
-    const location = band.location.trim();
-    if (!location) continue;
-    locationCounts.set(location, (locationCounts.get(location) || 0) + 1);
+    const parts = parseLocationParts(band.location);
+    for (const part of parts) {
+      locationCounts.set(part, (locationCounts.get(part) || 0) + 1);
+    }
   }
 
   return Array.from(locationCounts.entries())
@@ -683,18 +573,104 @@ function getTopLocations(bands: BandData[], limit = 10): Array<{ location: strin
     .slice(0, limit);
 }
 
+// Normalize a genre by removing "Metal" suffix
+// e.g., "Death Metal" -> "Death", "Black Metal" -> "Black", "Doom" -> "Doom"
+function normalizeGenre(genre: string): string {
+  return genre.replace(/\s+Metal$/i, '').trim();
+}
+
+// Parse a band's genre string into normalized parts
+// e.g., "Black/Thrash Metal" -> ["Black", "Thrash"]
+// e.g., "Melodic Death Metal" -> ["Melodic Death"]
+// e.g., "Death Metal, Black Metal" -> ["Death", "Black"]
+function parseGenreParts(genreStr: string): string[] {
+  if (!genreStr) return [];
+
+  // Remove parenthetical content like "(early)", "(later)"
+  const cleaned = genreStr.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
+
+  // Split on comma or semicolon first (these are usually separate genres)
+  const commaParts = cleaned.split(/[,;]/).map(p => p.trim()).filter(p => p);
+
+  const results: string[] = [];
+
+  for (const part of commaParts) {
+    // Check if this part has a slash (e.g., "Black/Thrash Metal" or "Death/Black Metal")
+    if (part.includes('/')) {
+      // Find the suffix (e.g., "Metal", "Rock")
+      const suffixMatch = part.match(/\s+(Metal|Rock|Punk|Core|Grind|Grindcore|Doom|Hardcore)$/i);
+      const suffix = suffixMatch ? suffixMatch[0] : '';
+
+      // Remove the suffix from the end, split on slash, then re-add suffix to each
+      const withoutSuffix = suffix ? part.slice(0, -suffix.length).trim() : part;
+      const slashParts = withoutSuffix.split('/').map(p => p.trim()).filter(p => p);
+
+      for (const sp of slashParts) {
+        // If the part already ends with a genre word, don't add suffix
+        if (/Metal|Rock|Punk|Core|Grind|Grindcore|Doom|Hardcore$/i.test(sp)) {
+          results.push(normalizeGenre(sp));
+        } else {
+          results.push(normalizeGenre((sp + suffix).trim()));
+        }
+      }
+    } else {
+      results.push(normalizeGenre(part));
+    }
+  }
+
+  return [...new Set(results)]; // Remove duplicates
+}
+
+// Check if a band matches any of the selected genre filters
+function bandMatchesGenreFilter(band: BandData, filterGenres: Set<string>): boolean {
+  if (filterGenres.size === 0) return true;
+  const bandGenres = parseGenreParts(band.genre);
+  return bandGenres.some(g => filterGenres.has(g));
+}
+
+// Parse a band's location string into normalized parts
+// Location format is typically: "City, Region" or "City, Region ; City2, Region2" for multi-country bands
+function parseLocationParts(locationStr: string): string[] {
+  if (!locationStr) return [];
+
+  // Remove parenthetical content like "(early)"
+  const cleaned = locationStr.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
+
+  // Split on semicolon first (for multi-country bands)
+  const locations = cleaned.split(/\s*;\s*/);
+
+  const parts: string[] = [];
+  for (const loc of locations) {
+    // For each location, split on comma to get city and region
+    const cityRegion = loc.split(/,/).map(p => p.trim()).filter(p => p);
+    // Add the full location and individual parts
+    if (cityRegion.length > 1) {
+      // Add region (usually province/state/country) - this is typically the last part
+      parts.push(cityRegion[cityRegion.length - 1]);
+    }
+    if (cityRegion.length > 0) {
+      // Add city (first part)
+      parts.push(cityRegion[0]);
+    }
+  }
+
+  return [...new Set(parts)]; // Remove duplicates
+}
+
+// Check if a band matches any of the selected location filters
+function bandMatchesLocationFilter(band: BandData, filterLocations: Set<string>): boolean {
+  if (filterLocations.size === 0) return true;
+  const bandLocations = parseLocationParts(band.location);
+  return bandLocations.some(l => filterLocations.has(l));
+}
+
 function getTopGenres(bands: BandData[], limit = 10): Array<{ genre: string; count: number }> {
   const genreCounts = new Map<string, number>();
 
   for (const band of bands) {
-    // Normalize genre - extract primary genre keywords
-    const genre = band.genre.trim();
-    if (!genre) continue;
-
-    // Split on common separators and get primary genres
-    const primaryGenres = extractPrimaryGenres(genre);
-    for (const g of primaryGenres) {
-      genreCounts.set(g, (genreCounts.get(g) || 0) + 1);
+    const parts = parseGenreParts(band.genre);
+    for (const part of parts) {
+      genreCounts.set(part, (genreCounts.get(part) || 0) + 1);
     }
   }
 
@@ -739,99 +715,32 @@ function extractPrimaryGenres(genreStr: string): string[] {
 }
 
 function applyFilters(): BandData[] {
-  const { allBands, filterText, filterStatuses, filterGenre, filterLocation } = appState;
+  const { allBands, filterText, filterStatuses, filterGenres, filterLocations } = appState;
 
   return allBands.filter((band) => {
-    // Text filter (searches name only when genre/location filters are active)
+    // Text filter
     const textMatch = !filterText ||
       band.name.toLowerCase().includes(filterText) ||
       band.genre.toLowerCase().includes(filterText) ||
       band.location.toLowerCase().includes(filterText);
 
-    // Status filter
+    // Status filter (OR within statuses)
     const statusMatch = filterStatuses.size === 0 ||
       filterStatuses.has(band.statusNormalized);
 
-    // Genre filter
-    const genreMatch = !filterGenre ||
-      band.genre.toLowerCase().includes(filterGenre.toLowerCase());
+    // Genre filter (OR within genres)
+    const genreMatch = bandMatchesGenreFilter(band, filterGenres);
 
-    // Location filter
-    const locationMatch = !filterLocation ||
-      band.location.toLowerCase().includes(filterLocation.toLowerCase());
+    // Location filter (OR within locations)
+    const locationMatch = bandMatchesLocationFilter(band, filterLocations);
 
     return textMatch && statusMatch && genreMatch && locationMatch;
   });
 }
 
-async function fetchBandLinks(bandUrl: string): Promise<BandTableLink[]> {
-  const links: BandTableLink[] = [];
-
-  try {
-    const fullUrl = bandUrl.startsWith('http') ? bandUrl : `https://www.metal-archives.com${bandUrl}`;
-    const response = await fetch(fullUrl);
-    const html = await response.text();
-
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-
-    const linkPatterns: Array<{ pattern: RegExp; name: string; icon: string }> = [
-      { pattern: /bandcamp\.com/i, name: 'Bandcamp', icon: '🎵' },
-      { pattern: /spotify\.com/i, name: 'Spotify', icon: '🎧' },
-      { pattern: /youtube\.com|youtu\.be/i, name: 'YouTube', icon: '▶️' },
-      { pattern: /soundcloud\.com/i, name: 'SoundCloud', icon: '☁️' },
-    ];
-
-    const seenUrls = new Set<string>();
-    const allLinks = doc.querySelectorAll('a[href]');
-
-    allLinks.forEach((el) => {
-      const href = el.getAttribute('href');
-      if (!href || seenUrls.has(href)) return;
-
-      for (const { pattern, name, icon } of linkPatterns) {
-        if (pattern.test(href)) {
-          seenUrls.add(href);
-          links.push({ name, url: href, icon });
-          break;
-        }
-      }
-    });
-  } catch (error) {
-    console.error('[BMA] Failed to fetch band links:', error);
-  }
-
-  return links;
-}
-
-function renderBandLinks(band: BandData, cell: HTMLElement) {
-  if (band.linksFetched) {
-    if (band.links && band.links.length > 0) {
-      cell.innerHTML = band.links.map((link) =>
-        `<a href="${link.url}" target="_blank" rel="noopener" class="bma-table-link ${link.name.toLowerCase()}" title="${link.name}">${link.icon}</a>`
-      ).join(' ');
-    } else {
-      cell.textContent = '-';
-    }
-  } else {
-    cell.innerHTML = '<span class="bma-links-loading">...</span>';
-    fetchBandLinks(band.bandUrl).then((links) => {
-      band.links = links;
-      band.linksFetched = true;
-      if (links.length > 0) {
-        cell.innerHTML = links.map((link) =>
-          `<a href="${link.url}" target="_blank" rel="noopener" class="bma-table-link ${link.name.toLowerCase()}" title="${link.name}">${link.icon}</a>`
-        ).join(' ');
-      } else {
-        cell.textContent = '-';
-      }
-    });
-  }
-}
-
 function renderFilteredResults(container: HTMLElement) {
-  const { filteredBands, currentPage, pageSize, filterText, filterStatuses, filterGenre, filterLocation } = appState;
-  const isFiltering = filterText || filterStatuses.size > 0 || filterGenre || filterLocation;
+  const { filteredBands, currentPage, pageSize, filterText, filterStatuses, filterGenres, filterLocations } = appState;
+  const isFiltering = filterText || filterStatuses.size > 0 || filterGenres.size > 0 || filterLocations.size > 0;
 
   if (!isFiltering) {
     container.classList.remove('visible');
@@ -849,11 +758,11 @@ function renderFilteredResults(container: HTMLElement) {
 
   // Build active filters display
   const activeFilters: string[] = [];
-  if (filterGenre) activeFilters.push(`Genre: ${filterGenre}`);
-  if (filterLocation) activeFilters.push(`Location: ${filterLocation}`);
-  if (filterStatuses.size > 0) activeFilters.push(`Status: ${Array.from(filterStatuses).join(', ')}`);
-  if (filterText) activeFilters.push(`Text: "${filterText}"`);
-  const filtersDisplay = activeFilters.length > 0 ? ` (${activeFilters.join(' + ')})` : '';
+  if (filterGenres.size > 0) activeFilters.push(`Genre: ${Array.from(filterGenres).join(' or ')}`);
+  if (filterLocations.size > 0) activeFilters.push(`Location: ${Array.from(filterLocations).join(' or ')}`);
+  if (filterStatuses.size > 0) activeFilters.push(`Status: ${Array.from(filterStatuses).join(' or ')}`);
+  if (filterText) activeFilters.push(`"${filterText}"`);
+  const filtersDisplay = activeFilters.length > 0 ? ` — ${activeFilters.join(' + ')}` : '';
 
   container.innerHTML = `
     <div class="bma-results-info">
@@ -867,7 +776,6 @@ function renderFilteredResults(container: HTMLElement) {
           <th>Genre</th>
           <th>Location</th>
           <th>Status</th>
-          <th>Links</th>
         </tr>
       </thead>
       <tbody>
@@ -877,7 +785,6 @@ function renderFilteredResults(container: HTMLElement) {
             <td>${band.genre}</td>
             <td>${band.location}</td>
             <td>${band.status}</td>
-            <td class="bma-links-cell" data-band-idx="${startIdx + idx}"></td>
           </tr>
         `).join('')}
       </tbody>
@@ -891,29 +798,18 @@ function renderFilteredResults(container: HTMLElement) {
     ` : ''}
   `;
 
-  // Fetch links for visible bands
-  container.querySelectorAll('.bma-links-cell').forEach((cell) => {
-    const idx = parseInt(cell.getAttribute('data-band-idx') || '0', 10);
-    const band = filteredBands[idx];
-    if (band) {
-      renderBandLinks(band, cell as HTMLElement);
-    }
-  });
-
   // Clear filter handler
   container.querySelector('.bma-clear-filter')?.addEventListener('click', () => {
     appState.filterText = '';
     appState.filterStatuses.clear();
-    appState.filterGenre = '';
-    appState.filterLocation = '';
+    appState.filterGenres.clear();
+    appState.filterLocations.clear();
     appState.currentPage = 0;
 
     const input = document.getElementById('bma-filter-input') as HTMLInputElement;
     if (input) input.value = '';
 
-    document.querySelectorAll('.bma-tag').forEach((t) => t.classList.remove('active'));
-    document.querySelectorAll('.bma-genre').forEach((t) => t.classList.remove('active'));
-    document.querySelectorAll('.bma-location').forEach((t) => t.classList.remove('active'));
+    document.querySelectorAll('.bma-stat').forEach((t) => t.classList.remove('active'));
     updateFilterCount();
     appState.filteredBands = applyFilters();
     renderFilteredResults(container);
@@ -973,8 +869,9 @@ function generatePageButtons(current: number, total: number): string {
 function updateFilterCount() {
   const countEl = document.querySelector('.bma-filter-count');
   if (countEl) {
-    const { filteredBands, allBands, filterText, filterStatuses } = appState;
-    if (filterText || filterStatuses.size > 0) {
+    const { filteredBands, allBands, filterText, filterStatuses, filterGenres, filterLocations } = appState;
+    const hasFilters = filterText || filterStatuses.size > 0 || filterGenres.size > 0 || filterLocations.size > 0;
+    if (hasFilters) {
       countEl.textContent = `${filteredBands.length.toLocaleString()} / ${allBands.length.toLocaleString()}`;
     } else {
       countEl.textContent = '';
@@ -990,19 +887,12 @@ function initCountryListPage() {
   controls.className = 'bma-controls';
   controls.innerHTML = `
     <div class="bma-controls-header">Better Metal Archives</div>
-    <div class="bma-summary">
-      <div class="bma-loading">Loading all bands...</div>
-    </div>
-    <div class="bma-genres"></div>
-    <div class="bma-locations"></div>
+    <div class="bma-loading">Loading all bands...</div>
+    <div class="bma-stats-section bma-status-stats"></div>
+    <div class="bma-stats-section bma-genre-stats"></div>
+    <div class="bma-stats-section bma-location-stats"></div>
     <div class="bma-filter-row">
-      <input type="text" class="bma-filter-input" placeholder="Filter all bands..." id="bma-filter-input">
-      <div class="bma-filter-tags">
-        <span class="bma-tag" data-status="active">Active</span>
-        <span class="bma-tag" data-status="split-up">Split-up</span>
-        <span class="bma-tag" data-status="on-hold">On hold</span>
-        <span class="bma-tag" data-status="changed-name">Changed name</span>
-      </div>
+      <input type="text" class="bma-filter-input" placeholder="Search by name..." id="bma-filter-input">
       <span class="bma-filter-count"></span>
     </div>
   `;
@@ -1018,7 +908,7 @@ function initCountryListPage() {
       tableWrapper.parentElement?.insertBefore(controls, tableWrapper);
       tableWrapper.parentElement?.insertBefore(resultsContainer, tableWrapper);
       controls.classList.add('visible');
-      setupFilterLogic(resultsContainer);
+      setupFilterLogic(controls, resultsContainer);
       loadAllData(countryCode, controls, resultsContainer);
       observer.disconnect();
     }
@@ -1028,137 +918,205 @@ function initCountryListPage() {
 }
 
 async function loadAllData(countryCode: string, controls: HTMLElement, resultsContainer: HTMLElement) {
-  const summaryEl = controls.querySelector('.bma-summary');
+  const loadingEl = controls.querySelector('.bma-loading');
 
   try {
     const bands = await fetchAllBands(countryCode, (loaded, total) => {
-      if (summaryEl) {
-        summaryEl.innerHTML = `<div class="bma-loading">Loading bands... ${loaded.toLocaleString()} / ${total.toLocaleString()}</div>`;
+      if (loadingEl) {
+        loadingEl.textContent = `Loading bands... ${loaded.toLocaleString()} / ${total.toLocaleString()}`;
       }
     });
+
+    // Hide loading
+    if (loadingEl) loadingEl.style.display = 'none';
 
     appState.allBands = bands;
     appState.filteredBands = bands;
 
-    const counts = countStatuses(bands);
-    const topGenres = getTopGenres(bands, 10);
-    const topLocations = getTopLocations(bands, 10);
-
-    if (summaryEl) {
-      summaryEl.innerHTML = `
-        <div class="bma-stat total">
-          <span class="bma-stat-value">${counts.total.toLocaleString()}</span>
-          <span class="bma-stat-label">total</span>
-        </div>
-        <div class="bma-stat active">
-          <span class="bma-stat-value">${counts.active.toLocaleString()}</span>
-          <span class="bma-stat-label">active</span>
-        </div>
-        <div class="bma-stat split-up">
-          <span class="bma-stat-value">${counts['split-up'].toLocaleString()}</span>
-          <span class="bma-stat-label">split-up</span>
-        </div>
-        <div class="bma-stat on-hold">
-          <span class="bma-stat-value">${counts['on-hold'].toLocaleString()}</span>
-          <span class="bma-stat-label">on hold</span>
-        </div>
-        <div class="bma-stat changed-name">
-          <span class="bma-stat-value">${counts['changed-name'].toLocaleString()}</span>
-          <span class="bma-stat-label">changed name</span>
-        </div>
-        <div class="bma-stat unknown">
-          <span class="bma-stat-value">${counts.unknown.toLocaleString()}</span>
-          <span class="bma-stat-label">unknown</span>
-        </div>
-      `;
-    }
-
-    // Render top genres
-    const genresEl = controls.querySelector('.bma-genres');
-    if (genresEl && topGenres.length > 0) {
-      genresEl.innerHTML = `
-        <span class="bma-genres-title">Top genres</span>
-        ${topGenres.map((g) => `
-          <span class="bma-genre" data-genre="${g.genre}">
-            ${g.genre}
-            <span class="bma-genre-count">(${g.count.toLocaleString()})</span>
-          </span>
-        `).join('')}
-      `;
-
-      // Add click handlers to filter by genre (toggle)
-      genresEl.querySelectorAll('.bma-genre').forEach((el) => {
-        el.addEventListener('click', () => {
-          const genre = el.getAttribute('data-genre');
-          if (!genre) return;
-
-          // Toggle: if same genre clicked again, clear it
-          if (appState.filterGenre === genre) {
-            appState.filterGenre = '';
-            el.classList.remove('active');
-          } else {
-            // Clear previous active genre
-            genresEl.querySelectorAll('.bma-genre').forEach((g) => g.classList.remove('active'));
-            appState.filterGenre = genre;
-            el.classList.add('active');
-          }
-
-          appState.currentPage = 0;
-          appState.filteredBands = applyFilters();
-          updateFilterCount();
-          renderFilteredResults(resultsContainer);
-        });
-      });
-    }
-
-    // Render top locations
-    const locationsEl = controls.querySelector('.bma-locations');
-    if (locationsEl && topLocations.length > 0) {
-      locationsEl.innerHTML = `
-        <span class="bma-locations-title">Top locations</span>
-        ${topLocations.map((loc) => `
-          <span class="bma-location" data-location="${loc.location}">
-            ${loc.location}
-            <span class="bma-location-count">(${loc.count})</span>
-          </span>
-        `).join('')}
-      `;
-
-      // Add click handlers to filter by location (toggle)
-      locationsEl.querySelectorAll('.bma-location').forEach((el) => {
-        el.addEventListener('click', () => {
-          const location = el.getAttribute('data-location');
-          if (!location) return;
-
-          // Toggle: if same location clicked again, clear it
-          if (appState.filterLocation === location) {
-            appState.filterLocation = '';
-            el.classList.remove('active');
-          } else {
-            // Clear previous active location
-            locationsEl.querySelectorAll('.bma-location').forEach((l) => l.classList.remove('active'));
-            appState.filterLocation = location;
-            el.classList.add('active');
-          }
-
-          appState.currentPage = 0;
-          appState.filteredBands = applyFilters();
-          updateFilterCount();
-          renderFilteredResults(resultsContainer);
-        });
-      });
-    }
+    // Initial render of stats
+    renderStats(controls, resultsContainer);
   } catch (error) {
     console.error('[BMA] Failed to load data:', error);
-    if (summaryEl) {
-      summaryEl.innerHTML = `<div class="bma-loading" style="color: #f87171;">Failed to load data</div>`;
+    if (loadingEl) {
+      loadingEl.textContent = 'Failed to load data';
+      loadingEl.style.color = '#f87171';
     }
   }
 }
 
-function setupFilterLogic(resultsContainer: HTMLElement) {
+function renderStats(controls: HTMLElement, resultsContainer: HTMLElement) {
+  const { allBands, filteredBands, filterStatuses, filterGenres, filterLocations } = appState;
+  const hasFilters = filterStatuses.size > 0 || filterGenres.size > 0 || filterLocations.size > 0 || appState.filterText;
+
+  // Calculate counts based on filtered data (excluding the filter type being counted)
+  // For status: count from bands filtered by genres + locations + text only
+  const bandsForStatusCount = allBands.filter((band) => {
+    const textMatch = !appState.filterText ||
+      band.name.toLowerCase().includes(appState.filterText) ||
+      band.genre.toLowerCase().includes(appState.filterText) ||
+      band.location.toLowerCase().includes(appState.filterText);
+    const genreMatch = bandMatchesGenreFilter(band, filterGenres);
+    const locationMatch = bandMatchesLocationFilter(band, filterLocations);
+    return textMatch && genreMatch && locationMatch;
+  });
+
+  // For genres: count from bands filtered by statuses + locations + text only
+  const bandsForGenreCount = allBands.filter((band) => {
+    const textMatch = !appState.filterText ||
+      band.name.toLowerCase().includes(appState.filterText) ||
+      band.genre.toLowerCase().includes(appState.filterText) ||
+      band.location.toLowerCase().includes(appState.filterText);
+    const statusMatch = filterStatuses.size === 0 ||
+      filterStatuses.has(band.statusNormalized);
+    const locationMatch = bandMatchesLocationFilter(band, filterLocations);
+    return textMatch && statusMatch && locationMatch;
+  });
+
+  // For locations: count from bands filtered by statuses + genres + text only
+  const bandsForLocationCount = allBands.filter((band) => {
+    const textMatch = !appState.filterText ||
+      band.name.toLowerCase().includes(appState.filterText) ||
+      band.genre.toLowerCase().includes(appState.filterText) ||
+      band.location.toLowerCase().includes(appState.filterText);
+    const statusMatch = filterStatuses.size === 0 ||
+      filterStatuses.has(band.statusNormalized);
+    const genreMatch = bandMatchesGenreFilter(band, filterGenres);
+    return textMatch && statusMatch && genreMatch;
+  });
+
+  const statusCounts = countStatuses(bandsForStatusCount);
+  const topGenres = getTopGenres(bandsForGenreCount, 30);
+  const topLocations = getTopLocations(bandsForLocationCount, 30);
+
+  // Render status stats
+  const statusStatsEl = controls.querySelector('.bma-status-stats');
+  if (statusStatsEl) {
+    statusStatsEl.innerHTML = `
+      <div class="bma-stats-title">Status</div>
+      <div class="bma-stats-row">
+        <div class="bma-stat total">
+          <span class="bma-stat-value">${(hasFilters ? filteredBands.length : allBands.length).toLocaleString()}</span>
+          <span class="bma-stat-label">total</span>
+        </div>
+        <div class="bma-stat${filterStatuses.has('active') ? ' active' : ''}" data-status="active">
+          <span class="bma-stat-value">${statusCounts.active.toLocaleString()}</span>
+          <span class="bma-stat-label">active</span>
+        </div>
+        <div class="bma-stat${filterStatuses.has('split-up') ? ' active' : ''}" data-status="split-up">
+          <span class="bma-stat-value">${statusCounts['split-up'].toLocaleString()}</span>
+          <span class="bma-stat-label">split-up</span>
+        </div>
+        <div class="bma-stat${filterStatuses.has('on-hold') ? ' active' : ''}" data-status="on-hold">
+          <span class="bma-stat-value">${statusCounts['on-hold'].toLocaleString()}</span>
+          <span class="bma-stat-label">on hold</span>
+        </div>
+        <div class="bma-stat${filterStatuses.has('changed-name') ? ' active' : ''}" data-status="changed-name">
+          <span class="bma-stat-value">${statusCounts['changed-name'].toLocaleString()}</span>
+          <span class="bma-stat-label">changed</span>
+        </div>
+        <div class="bma-stat${filterStatuses.has('unknown') ? ' active' : ''}" data-status="unknown">
+          <span class="bma-stat-value">${statusCounts.unknown.toLocaleString()}</span>
+          <span class="bma-stat-label">unknown</span>
+        </div>
+      </div>
+    `;
+
+    // Add click handlers for status stats
+    statusStatsEl.querySelectorAll('.bma-stat[data-status]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const status = el.getAttribute('data-status');
+        if (!status) return;
+
+        if (appState.filterStatuses.has(status)) {
+          appState.filterStatuses.delete(status);
+        } else {
+          appState.filterStatuses.add(status);
+        }
+
+        appState.currentPage = 0;
+        appState.filteredBands = applyFilters();
+        updateFilterCount();
+        renderStats(controls, resultsContainer);
+        renderFilteredResults(resultsContainer);
+      });
+    });
+  }
+
+  // Render genre stats
+  const genreStatsEl = controls.querySelector('.bma-genre-stats');
+  if (genreStatsEl && topGenres.length > 0) {
+    genreStatsEl.innerHTML = `
+      <div class="bma-stats-title">Top Genres</div>
+      <div class="bma-stats-row">
+        ${topGenres.map((g) => `
+          <div class="bma-stat${filterGenres.has(g.genre) ? ' active' : ''}" data-genre="${g.genre}">
+            <span class="bma-stat-value">${g.count.toLocaleString()}</span>
+            <span class="bma-stat-label">${g.genre}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    // Add click handlers for genre stats
+    genreStatsEl.querySelectorAll('.bma-stat[data-genre]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const genre = el.getAttribute('data-genre');
+        if (!genre) return;
+
+        if (appState.filterGenres.has(genre)) {
+          appState.filterGenres.delete(genre);
+        } else {
+          appState.filterGenres.add(genre);
+        }
+
+        appState.currentPage = 0;
+        appState.filteredBands = applyFilters();
+        updateFilterCount();
+        renderStats(controls, resultsContainer);
+        renderFilteredResults(resultsContainer);
+      });
+    });
+  }
+
+  // Render location stats
+  const locationStatsEl = controls.querySelector('.bma-location-stats');
+  if (locationStatsEl && topLocations.length > 0) {
+    locationStatsEl.innerHTML = `
+      <div class="bma-stats-title">Top Locations</div>
+      <div class="bma-stats-row">
+        ${topLocations.map((loc) => `
+          <div class="bma-stat${filterLocations.has(loc.location) ? ' active' : ''}" data-location="${loc.location}">
+            <span class="bma-stat-value">${loc.count.toLocaleString()}</span>
+            <span class="bma-stat-label">${loc.location}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    // Add click handlers for location stats
+    locationStatsEl.querySelectorAll('.bma-stat[data-location]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const location = el.getAttribute('data-location');
+        if (!location) return;
+
+        if (appState.filterLocations.has(location)) {
+          appState.filterLocations.delete(location);
+        } else {
+          appState.filterLocations.add(location);
+        }
+
+        appState.currentPage = 0;
+        appState.filteredBands = applyFilters();
+        updateFilterCount();
+        renderStats(controls, resultsContainer);
+        renderFilteredResults(resultsContainer);
+      });
+    });
+  }
+}
+
+function setupFilterLogic(controls: HTMLElement, resultsContainer: HTMLElement) {
   const input = document.getElementById('bma-filter-input') as HTMLInputElement;
-  const tags = document.querySelectorAll('.bma-tag[data-status]');
 
   if (!input) return;
 
@@ -1172,29 +1130,9 @@ function setupFilterLogic(resultsContainer: HTMLElement) {
       appState.currentPage = 0;
       appState.filteredBands = applyFilters();
       updateFilterCount();
+      renderStats(controls, resultsContainer);
       renderFilteredResults(resultsContainer);
     }, 150);
-  });
-
-  // Status tag toggles
-  tags.forEach((tag) => {
-    tag.addEventListener('click', () => {
-      const status = tag.getAttribute('data-status');
-      if (!status) return;
-
-      if (appState.filterStatuses.has(status)) {
-        appState.filterStatuses.delete(status);
-        tag.classList.remove('active');
-      } else {
-        appState.filterStatuses.add(status);
-        tag.classList.add('active');
-      }
-
-      appState.currentPage = 0;
-      appState.filteredBands = applyFilters();
-      updateFilterCount();
-      renderFilteredResults(resultsContainer);
-    });
   });
 }
 
@@ -1426,9 +1364,9 @@ function extractBandData(doc: Document, albums: AlbumData[]): BandPreviewData {
       else if (dtLabel.includes('status')) status = value;
       else if (dtLabel.includes('formed')) formedIn = value;
       else if (dtLabel.includes('genre')) genre = value;
-      else if (dtLabel.includes('lyrical')) lyricalThemes = value;
+      else if (dtLabel.includes('lyrical') || dtLabel.includes('themes')) lyricalThemes = value;
       else if (dtLabel.includes('years active')) yearsActive = value;
-      else if (dtLabel.includes('label')) labelName = value;
+      else if (dtLabel.includes('current label') || (dtLabel.includes('label') && !dtLabel.includes('lyrical'))) labelName = value;
     });
   }
 
@@ -1489,7 +1427,7 @@ function renderPreview(data: BandPreviewData) {
         ${data.lyricalThemes ? `
         <div class="bma-preview-meta-item">
           <span class="bma-preview-meta-value">${data.lyricalThemes}</span>
-          <span class="bma-preview-meta-label">Themes</span>
+          <span class="bma-preview-meta-label">Lyrical Themes</span>
         </div>
         ` : ''}
       </div>

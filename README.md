@@ -11,3 +11,7 @@ This extension aims to add some useful features that hopefully makes your time o
 ## Bands/Labels by country
 
 This page now has search functionality and filtering.
+
+## Development
+
+`npm run dev`
