@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node scripts/generate-icons.mjs:*)",
+      "Bash(ls:*)",
+      "Bash(npm run build:chrome:*)",
+      "Bash(npm run zip:chrome:*)"
+    ]
+  }
+}

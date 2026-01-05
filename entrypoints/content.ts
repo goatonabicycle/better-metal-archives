@@ -3,12 +3,6 @@ export default defineContentScript({
   runAt: 'document_start',
 
   async main() {
-    // Inject script into page context to intercept XHR/fetch
-    const script = document.createElement('script');
-    script.src = browser.runtime.getURL('/injected.js');
-    script.onload = () => script.remove();
-    document.documentElement.appendChild(script);
-
     // Wait for DOM to be ready before adding UI elements
     if (document.readyState === 'loading') {
       await new Promise((resolve) => document.addEventListener('DOMContentLoaded', resolve));
@@ -16,47 +10,6 @@ export default defineContentScript({
 
     const style = document.createElement('style');
     style.textContent = `
-      #better-metal-archives-debug {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-        border: 1px solid #444;
-        border-radius: 8px;
-        padding: 0;
-        z-index: 999999;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        font-size: 13px;
-        color: #e0e0e0;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-        min-width: 220px;
-        overflow: hidden;
-      }
-
-      #better-metal-archives-debug .bma-header {
-        background: linear-gradient(135deg, #8b0000 0%, #a00000 100%);
-        color: #fff;
-        padding: 10px 14px;
-        font-weight: 600;
-        font-size: 14px;
-        letter-spacing: 0.3px;
-      }
-
-      #better-metal-archives-debug .bma-content {
-        padding: 12px 14px;
-      }
-
-      #better-metal-archives-debug .bma-info {
-        color: #4ade80;
-        margin-bottom: 6px;
-      }
-
-      #better-metal-archives-debug .bma-url {
-        color: #888;
-        font-size: 11px;
-        word-break: break-all;
-      }
-
       .bma-controls {
         display: none;
         flex-direction: column;
@@ -141,6 +94,8 @@ export default defineContentScript({
       .bma-stat[data-status="changed-name"].active { border-color: #69c; background: #1a2a3a; }
       .bma-stat[data-status="unknown"] .bma-stat-value { color: #888; }
       .bma-stat[data-status="unknown"].active { border-color: #888; background: #222; }
+      .bma-stat[data-status="closed"] .bma-stat-value { color: #c66; }
+      .bma-stat[data-status="closed"].active { border-color: #c66; background: #2a1a1a; }
 
       /* Genre colors */
       .bma-stat[data-genre] .bma-stat-value { color: #c9a; }
@@ -327,6 +282,7 @@ export default defineContentScript({
       .bma-preview-status.split-up { background: #3a1a1a; color: #c66; }
       .bma-preview-status.on-hold { background: #3a3a1a; color: #cc6; }
       .bma-preview-status.changed-name { background: #1a2a3a; color: #69c; }
+      .bma-preview-status.closed { background: #3a1a1a; color: #c66; }
 
       .bma-preview-albums {
         margin-top: 10px;
@@ -433,29 +389,18 @@ export default defineContentScript({
     `;
     document.head.appendChild(style);
 
-    // Check if we're on a country list page
+    // Check if we're on a country list page or label country page
     const isCountryListPage = /^\/lists\/[A-Z]{2}$/.test(window.location.pathname);
+    const isLabelCountryPage = /^\/label\/country\/c\/[A-Z]{2}$/.test(window.location.pathname);
 
     if (isCountryListPage) {
       initCountryListPage();
+    } else if (isLabelCountryPage) {
+      initLabelCountryPage();
     }
 
     // Initialize band hover preview on all pages
     initBandPreview();
-
-    // Debug panel
-    const debugDiv = document.createElement('div');
-    debugDiv.id = 'better-metal-archives-debug';
-    debugDiv.innerHTML = `
-      <div class="bma-header">Better Metal Archives</div>
-      <div class="bma-content">
-        <div class="bma-info">Extension loaded</div>
-        <div class="bma-url">Page: ${isCountryListPage ? 'Country List' : 'Other'}</div>
-      </div>
-    `;
-    document.body.appendChild(debugDiv);
-
-    console.log('[Better Metal Archives] Content script loaded');
   },
 });
 
@@ -468,16 +413,27 @@ interface BandData {
   statusNormalized: string;
 }
 
+interface LabelData {
+  name: string;
+  nameHtml: string;
+  specialisation: string;
+  status: string;
+  statusNormalized: string;
+  hasWebsite: boolean;
+  hasOnlineShopping: boolean;
+}
+
 interface StatusCounts {
   active: number;
   'split-up': number;
   'on-hold': number;
   'changed-name': number;
+  closed: number;
   unknown: number;
   total: number;
 }
 
-// Global state
+// Global state for band pages
 const appState = {
   allBands: [] as BandData[],
   filteredBands: [] as BandData[],
@@ -490,12 +446,24 @@ const appState = {
   isFiltering: false,
 };
 
+// Global state for label pages
+const labelState = {
+  allLabels: [] as LabelData[],
+  filteredLabels: [] as LabelData[],
+  filterText: '',
+  filterStatuses: new Set<string>(),
+  filterSpecialisations: new Set<string>(),
+  currentPage: 0,
+  pageSize: 100,
+};
+
 function normalizeStatus(status: string): string {
   const s = status.toLowerCase();
   if (s.includes('active')) return 'active';
   if (s.includes('split')) return 'split-up';
   if (s.includes('hold')) return 'on-hold';
   if (s.includes('changed')) return 'changed-name';
+  if (s.includes('closed')) return 'closed';
   return 'unknown';
 }
 
@@ -535,22 +503,24 @@ async function fetchAllBands(countryCode: string, onProgress?: (loaded: number, 
   return bands;
 }
 
-function countStatuses(bands: BandData[]): StatusCounts {
+function countStatuses(items: Array<{ statusNormalized: string }>): StatusCounts {
   const counts: StatusCounts = {
     active: 0,
     'split-up': 0,
     'on-hold': 0,
     'changed-name': 0,
+    closed: 0,
     unknown: 0,
-    total: bands.length,
+    total: items.length,
   };
 
-  for (const band of bands) {
-    const status = band.statusNormalized;
+  for (const item of items) {
+    const status = item.statusNormalized;
     if (status === 'active') counts.active++;
     else if (status === 'split-up') counts['split-up']++;
     else if (status === 'on-hold') counts['on-hold']++;
     else if (status === 'changed-name') counts['changed-name']++;
+    else if (status === 'closed') counts.closed++;
     else counts.unknown++;
   }
 
@@ -678,40 +648,6 @@ function getTopGenres(bands: BandData[], limit = 10): Array<{ genre: string; cou
     .map(([genre, count]) => ({ genre, count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, limit);
-}
-
-function extractPrimaryGenres(genreStr: string): string[] {
-  // Common metal genre keywords to look for
-  const genreKeywords = [
-    'Black Metal', 'Death Metal', 'Thrash Metal', 'Heavy Metal', 'Power Metal',
-    'Doom Metal', 'Progressive Metal', 'Folk Metal', 'Gothic Metal', 'Symphonic Metal',
-    'Melodic Death Metal', 'Melodic Black Metal', 'Technical Death Metal',
-    'Brutal Death Metal', 'Atmospheric Black Metal', 'Blackened Death Metal',
-    'Grindcore', 'Deathcore', 'Metalcore', 'Speed Metal', 'Sludge Metal',
-    'Stoner Metal', 'Post-Metal', 'Industrial Metal', 'Nu-Metal', 'Groove Metal',
-    'Viking Metal', 'Pagan Metal', 'Avant-garde Metal', 'Djent',
-    'Hard Rock', 'Rock', 'Punk', 'Hardcore'
-  ];
-
-  const found: string[] = [];
-  const lowerGenre = genreStr.toLowerCase();
-
-  for (const keyword of genreKeywords) {
-    if (lowerGenre.includes(keyword.toLowerCase())) {
-      found.push(keyword);
-      if (found.length >= 2) break; // Limit to 2 genres per band
-    }
-  }
-
-  // If no matches, try to get first genre before slash/comma
-  if (found.length === 0) {
-    const firstPart = genreStr.split(/[\/,;]/)[0].trim();
-    if (firstPart) {
-      found.push(firstPart);
-    }
-  }
-
-  return found;
 }
 
 function applyFilters(): BandData[] {
@@ -923,12 +859,12 @@ async function loadAllData(countryCode: string, controls: HTMLElement, resultsCo
   try {
     const bands = await fetchAllBands(countryCode, (loaded, total) => {
       if (loadingEl) {
-        loadingEl.textContent = `Loading bands... ${loaded.toLocaleString()} / ${total.toLocaleString()}`;
+        (loadingEl as HTMLElement).textContent = `Loading bands... ${loaded.toLocaleString()} / ${total.toLocaleString()}`;
       }
     });
 
     // Hide loading
-    if (loadingEl) loadingEl.style.display = 'none';
+    if (loadingEl) (loadingEl as HTMLElement).style.display = 'none';
 
     appState.allBands = bands;
     appState.filteredBands = bands;
@@ -938,8 +874,8 @@ async function loadAllData(countryCode: string, controls: HTMLElement, resultsCo
   } catch (error) {
     console.error('[BMA] Failed to load data:', error);
     if (loadingEl) {
-      loadingEl.textContent = 'Failed to load data';
-      loadingEl.style.color = '#f87171';
+      (loadingEl as HTMLElement).textContent = 'Failed to load data';
+      (loadingEl as HTMLElement).style.color = '#f87171';
     }
   }
 }
@@ -1132,6 +1068,394 @@ function setupFilterLogic(controls: HTMLElement, resultsContainer: HTMLElement) 
       updateFilterCount();
       renderStats(controls, resultsContainer);
       renderFilteredResults(resultsContainer);
+    }, 150);
+  });
+}
+
+// ============================================
+// Label Country Page Functions
+// ============================================
+
+async function fetchAllLabels(countryCode: string, onProgress?: (loaded: number, total: number) => void): Promise<LabelData[]> {
+  const labels: LabelData[] = [];
+  let start = 0;
+  const pageSize = 500;
+  let total = Infinity;
+
+  while (start < total) {
+    const url = `https://www.metal-archives.com/label/ajax-list/c/${countryCode}/json/1?sEcho=1&iDisplayStart=${start}&iDisplayLength=${pageSize}`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    total = data.iTotalRecords;
+
+    for (const row of data.aaData) {
+      // Row format: [edit_link, name_html, specialisation, status_html, website_html, online_shopping_html]
+      const nameMatch = row[1].match(/>([^<]+)</);
+      const name = nameMatch ? nameMatch[1] : row[1];
+
+      // Extract status text from the span
+      const statusMatch = row[3].match(/>([^<]+)</);
+      const status = statusMatch ? statusMatch[1] : row[3];
+
+      labels.push({
+        name,
+        nameHtml: row[1],
+        specialisation: row[2]?.replace(/&nbsp;/g, '').trim() || '',
+        status,
+        statusNormalized: normalizeStatus(status),
+        hasWebsite: row[4]?.includes('href') || false,
+        hasOnlineShopping: row[5]?.includes('ui-icon-check') || false,
+      });
+    }
+
+    start += pageSize;
+    onProgress?.(Math.min(start, total), total);
+  }
+
+  return labels;
+}
+
+function getTopSpecialisations(labels: LabelData[], limit = 30): Array<{ specialisation: string; count: number }> {
+  const specCounts = new Map<string, number>();
+
+  for (const label of labels) {
+    if (!label.specialisation) continue;
+    const parts = parseGenreParts(label.specialisation);
+    for (const part of parts) {
+      specCounts.set(part, (specCounts.get(part) || 0) + 1);
+    }
+  }
+
+  return Array.from(specCounts.entries())
+    .map(([specialisation, count]) => ({ specialisation, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
+}
+
+function labelMatchesSpecialisationFilter(label: LabelData, filterSpecs: Set<string>): boolean {
+  if (filterSpecs.size === 0) return true;
+  const labelSpecs = parseGenreParts(label.specialisation);
+  return labelSpecs.some(s => filterSpecs.has(s));
+}
+
+function applyLabelFilters(): LabelData[] {
+  const { allLabels, filterText, filterStatuses, filterSpecialisations } = labelState;
+
+  return allLabels.filter((label) => {
+    // Text filter
+    const textMatch = !filterText ||
+      label.name.toLowerCase().includes(filterText) ||
+      label.specialisation.toLowerCase().includes(filterText);
+
+    // Status filter (OR within statuses)
+    const statusMatch = filterStatuses.size === 0 ||
+      filterStatuses.has(label.statusNormalized);
+
+    // Specialisation filter (OR within specialisations)
+    const specMatch = labelMatchesSpecialisationFilter(label, filterSpecialisations);
+
+    return textMatch && statusMatch && specMatch;
+  });
+}
+
+function renderLabelFilteredResults(container: HTMLElement) {
+  const { filteredLabels, currentPage, pageSize, filterText, filterStatuses, filterSpecialisations } = labelState;
+  const isFiltering = filterText || filterStatuses.size > 0 || filterSpecialisations.size > 0;
+
+  if (!isFiltering) {
+    container.classList.remove('visible');
+    document.querySelector('#labelListCountry_wrapper')?.classList.remove('bma-original-hidden');
+    return;
+  }
+
+  container.classList.add('visible');
+  document.querySelector('#labelListCountry_wrapper')?.classList.add('bma-original-hidden');
+
+  const totalPages = Math.ceil(filteredLabels.length / pageSize);
+  const startIdx = currentPage * pageSize;
+  const endIdx = Math.min(startIdx + pageSize, filteredLabels.length);
+  const pageLabels = filteredLabels.slice(startIdx, endIdx);
+
+  // Build active filters display
+  const activeFilters: string[] = [];
+  if (filterSpecialisations.size > 0) activeFilters.push(`Specialisation: ${Array.from(filterSpecialisations).join(' or ')}`);
+  if (filterStatuses.size > 0) activeFilters.push(`Status: ${Array.from(filterStatuses).join(' or ')}`);
+  if (filterText) activeFilters.push(`"${filterText}"`);
+  const filtersDisplay = activeFilters.length > 0 ? ` — ${activeFilters.join(' + ')}` : '';
+
+  container.innerHTML = `
+    <div class="bma-results-info">
+      Showing ${startIdx + 1}-${endIdx} of ${filteredLabels.length.toLocaleString()} results${filtersDisplay}
+      <span class="bma-clear-filter">[Clear all filters]</span>
+    </div>
+    <table id="bma-filtered-table" class="display">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Specialisation</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${pageLabels.map((label, idx) => `
+          <tr class="${idx % 2 === 0 ? 'even' : 'odd'}">
+            <td>${label.nameHtml}</td>
+            <td>${label.specialisation || ''}</td>
+            <td><span class="${label.statusNormalized}">${label.status}</span></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+    ${totalPages > 1 ? `
+      <div class="bma-pagination">
+        <button class="bma-page-btn" data-page="prev" ${currentPage === 0 ? 'disabled' : ''}>Prev</button>
+        ${generatePageButtons(currentPage, totalPages)}
+        <button class="bma-page-btn" data-page="next" ${currentPage >= totalPages - 1 ? 'disabled' : ''}>Next</button>
+      </div>
+    ` : ''}
+  `;
+
+  // Clear filter handler
+  container.querySelector('.bma-clear-filter')?.addEventListener('click', () => {
+    labelState.filterText = '';
+    labelState.filterStatuses.clear();
+    labelState.filterSpecialisations.clear();
+    labelState.currentPage = 0;
+
+    const input = document.getElementById('bma-label-filter-input') as HTMLInputElement;
+    if (input) input.value = '';
+
+    document.querySelectorAll('.bma-stat').forEach((t) => t.classList.remove('active'));
+    updateLabelFilterCount();
+    labelState.filteredLabels = applyLabelFilters();
+    renderLabelFilteredResults(container);
+  });
+
+  // Pagination handlers
+  container.querySelectorAll('.bma-page-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const page = btn.getAttribute('data-page');
+      if (page === 'prev' && labelState.currentPage > 0) {
+        labelState.currentPage--;
+      } else if (page === 'next' && labelState.currentPage < totalPages - 1) {
+        labelState.currentPage++;
+      } else if (page !== 'prev' && page !== 'next') {
+        labelState.currentPage = parseInt(page!, 10);
+      }
+      renderLabelFilteredResults(container);
+    });
+  });
+}
+
+function updateLabelFilterCount() {
+  const countEl = document.querySelector('.bma-filter-count');
+  if (countEl) {
+    const { filteredLabels, allLabels, filterText, filterStatuses, filterSpecialisations } = labelState;
+    const hasFilters = filterText || filterStatuses.size > 0 || filterSpecialisations.size > 0;
+    if (hasFilters) {
+      countEl.textContent = `${filteredLabels.length.toLocaleString()} / ${allLabels.length.toLocaleString()}`;
+    } else {
+      countEl.textContent = '';
+    }
+  }
+}
+
+function initLabelCountryPage() {
+  const pathParts = window.location.pathname.split('/');
+  const countryCode = pathParts[pathParts.length - 1] || '';
+
+  // Create controls container
+  const controls = document.createElement('div');
+  controls.className = 'bma-controls';
+  controls.innerHTML = `
+    <div class="bma-controls-header">Better Metal Archives</div>
+    <div class="bma-loading">Loading all labels...</div>
+    <div class="bma-stats-section bma-status-stats"></div>
+    <div class="bma-stats-section bma-specialisation-stats"></div>
+    <div class="bma-filter-row">
+      <input type="text" class="bma-filter-input" placeholder="Search by name..." id="bma-label-filter-input">
+      <span class="bma-filter-count"></span>
+    </div>
+  `;
+
+  // Create results container
+  const resultsContainer = document.createElement('div');
+  resultsContainer.className = 'bma-results-container';
+
+  // Wait for the table to load and insert controls above it
+  const observer = new MutationObserver(() => {
+    const tableWrapper = document.querySelector('#labelListCountry_wrapper');
+    if (tableWrapper && !document.querySelector('.bma-controls.visible')) {
+      tableWrapper.parentElement?.insertBefore(controls, tableWrapper);
+      tableWrapper.parentElement?.insertBefore(resultsContainer, tableWrapper);
+      controls.classList.add('visible');
+      setupLabelFilterLogic(controls, resultsContainer);
+      loadAllLabelData(countryCode, controls, resultsContainer);
+      observer.disconnect();
+    }
+  });
+
+  observer.observe(document.body, { childList: true, subtree: true });
+}
+
+async function loadAllLabelData(countryCode: string, controls: HTMLElement, resultsContainer: HTMLElement) {
+  const loadingEl = controls.querySelector('.bma-loading');
+
+  try {
+    const labels = await fetchAllLabels(countryCode, (loaded, total) => {
+      if (loadingEl) {
+        (loadingEl as HTMLElement).textContent = `Loading labels... ${loaded.toLocaleString()} / ${total.toLocaleString()}`;
+      }
+    });
+
+    // Hide loading
+    if (loadingEl) (loadingEl as HTMLElement).style.display = 'none';
+
+    labelState.allLabels = labels;
+    labelState.filteredLabels = labels;
+
+    // Initial render of stats
+    renderLabelStats(controls, resultsContainer);
+  } catch (error) {
+    console.error('[BMA] Failed to load label data:', error);
+    if (loadingEl) {
+      (loadingEl as HTMLElement).textContent = 'Failed to load data';
+      (loadingEl as HTMLElement).style.color = '#f87171';
+    }
+  }
+}
+
+function renderLabelStats(controls: HTMLElement, resultsContainer: HTMLElement) {
+  const { allLabels, filteredLabels, filterStatuses, filterSpecialisations } = labelState;
+  const hasFilters = filterStatuses.size > 0 || filterSpecialisations.size > 0 || labelState.filterText;
+
+  // Calculate counts based on filtered data (excluding the filter type being counted)
+  const labelsForStatusCount = allLabels.filter((label) => {
+    const textMatch = !labelState.filterText ||
+      label.name.toLowerCase().includes(labelState.filterText) ||
+      label.specialisation.toLowerCase().includes(labelState.filterText);
+    const specMatch = labelMatchesSpecialisationFilter(label, filterSpecialisations);
+    return textMatch && specMatch;
+  });
+
+  const labelsForSpecCount = allLabels.filter((label) => {
+    const textMatch = !labelState.filterText ||
+      label.name.toLowerCase().includes(labelState.filterText) ||
+      label.specialisation.toLowerCase().includes(labelState.filterText);
+    const statusMatch = filterStatuses.size === 0 ||
+      filterStatuses.has(label.statusNormalized);
+    return textMatch && statusMatch;
+  });
+
+  const statusCounts = countStatuses(labelsForStatusCount);
+  const topSpecs = getTopSpecialisations(labelsForSpecCount, 30);
+
+  // Render status stats
+  const statusStatsEl = controls.querySelector('.bma-status-stats');
+  if (statusStatsEl) {
+    statusStatsEl.innerHTML = `
+      <div class="bma-stats-title">Status</div>
+      <div class="bma-stats-row">
+        <div class="bma-stat total">
+          <span class="bma-stat-value">${(hasFilters ? filteredLabels.length : allLabels.length).toLocaleString()}</span>
+          <span class="bma-stat-label">total</span>
+        </div>
+        <div class="bma-stat${filterStatuses.has('active') ? ' active' : ''}" data-status="active">
+          <span class="bma-stat-value">${statusCounts.active.toLocaleString()}</span>
+          <span class="bma-stat-label">active</span>
+        </div>
+        <div class="bma-stat${filterStatuses.has('closed') ? ' active' : ''}" data-status="closed">
+          <span class="bma-stat-value">${statusCounts.closed.toLocaleString()}</span>
+          <span class="bma-stat-label">closed</span>
+        </div>
+        <div class="bma-stat${filterStatuses.has('on-hold') ? ' active' : ''}" data-status="on-hold">
+          <span class="bma-stat-value">${statusCounts['on-hold'].toLocaleString()}</span>
+          <span class="bma-stat-label">on hold</span>
+        </div>
+        <div class="bma-stat${filterStatuses.has('unknown') ? ' active' : ''}" data-status="unknown">
+          <span class="bma-stat-value">${statusCounts.unknown.toLocaleString()}</span>
+          <span class="bma-stat-label">unknown</span>
+        </div>
+      </div>
+    `;
+
+    // Add click handlers for status stats
+    statusStatsEl.querySelectorAll('.bma-stat[data-status]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const status = el.getAttribute('data-status');
+        if (!status) return;
+
+        if (labelState.filterStatuses.has(status)) {
+          labelState.filterStatuses.delete(status);
+        } else {
+          labelState.filterStatuses.add(status);
+        }
+
+        labelState.currentPage = 0;
+        labelState.filteredLabels = applyLabelFilters();
+        updateLabelFilterCount();
+        renderLabelStats(controls, resultsContainer);
+        renderLabelFilteredResults(resultsContainer);
+      });
+    });
+  }
+
+  // Render specialisation stats
+  const specStatsEl = controls.querySelector('.bma-specialisation-stats');
+  if (specStatsEl && topSpecs.length > 0) {
+    specStatsEl.innerHTML = `
+      <div class="bma-stats-title">Top Specialisations</div>
+      <div class="bma-stats-row">
+        ${topSpecs.map((s) => `
+          <div class="bma-stat${filterSpecialisations.has(s.specialisation) ? ' active' : ''}" data-genre="${s.specialisation}">
+            <span class="bma-stat-value">${s.count.toLocaleString()}</span>
+            <span class="bma-stat-label">${s.specialisation}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    // Add click handlers for specialisation stats
+    specStatsEl.querySelectorAll('.bma-stat[data-genre]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const spec = el.getAttribute('data-genre');
+        if (!spec) return;
+
+        if (labelState.filterSpecialisations.has(spec)) {
+          labelState.filterSpecialisations.delete(spec);
+        } else {
+          labelState.filterSpecialisations.add(spec);
+        }
+
+        labelState.currentPage = 0;
+        labelState.filteredLabels = applyLabelFilters();
+        updateLabelFilterCount();
+        renderLabelStats(controls, resultsContainer);
+        renderLabelFilteredResults(resultsContainer);
+      });
+    });
+  }
+}
+
+function setupLabelFilterLogic(controls: HTMLElement, resultsContainer: HTMLElement) {
+  const input = document.getElementById('bma-label-filter-input') as HTMLInputElement;
+
+  if (!input) return;
+
+  // Debounce for text input
+  let debounceTimer: number;
+
+  input.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = window.setTimeout(() => {
+      labelState.filterText = input.value.toLowerCase();
+      labelState.currentPage = 0;
+      labelState.filteredLabels = applyLabelFilters();
+      updateLabelFilterCount();
+      renderLabelStats(controls, resultsContainer);
+      renderLabelFilteredResults(resultsContainer);
     }, 150);
   });
 }

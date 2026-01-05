@@ -1,7 +1,7 @@
 {
   "name": "better-metal-archives",
-  "version": "0.1.0",
-  "description": "Enhancements for Metal Archives",
+  "version": "1.0.0",
+  "description": "Filter Metal Archives by genre, location, and status. Hover over any band for a quick preview.",
   "type": "module",
   "scripts": {
     "dev": "wxt",
@@ -15,7 +15,8 @@
     "zip:firefox": "wxt zip -b firefox"
   },
   "devDependencies": {
-    "wxt": "^0.19.0",
-    "typescript": "^5.3.0"
+    "sharp": "^0.34.5",
+    "typescript": "^5.3.0",
+    "wxt": "^0.19.0"
   }
 }
