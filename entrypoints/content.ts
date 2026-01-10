@@ -105,6 +105,11 @@ export default defineContentScript({
       .bma-stat[data-location] .bma-stat-value { color: #9ac; }
       .bma-stat[data-location].active { border-color: #9ac; background: #1a2a2a; }
 
+      /* No location - dimmer style */
+      .bma-stat.no-location .bma-stat-value { color: #777; }
+      .bma-stat.no-location .bma-stat-label { font-style: italic; }
+      .bma-stat.no-location.active { border-color: #777; background: #222; }
+
       .bma-stat.total {
         cursor: default;
       }
@@ -527,20 +532,32 @@ function countStatuses(items: Array<{ statusNormalized: string }>): StatusCounts
   return counts;
 }
 
-function getTopLocations(bands: BandData[], limit = 10): Array<{ location: string; count: number }> {
+function getTopLocations(bands: BandData[], limit = 10): Array<{ location: string; count: number; isNoLocation?: boolean }> {
   const locationCounts = new Map<string, number>();
+  let noLocationCount = 0;
 
   for (const band of bands) {
+    if (!band.location.trim()) {
+      noLocationCount++;
+      continue;
+    }
     const parts = parseLocationParts(band.location);
     for (const part of parts) {
       locationCounts.set(part, (locationCounts.get(part) || 0) + 1);
     }
   }
 
-  return Array.from(locationCounts.entries())
+  const results = Array.from(locationCounts.entries())
     .map(([location, count]) => ({ location, count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, limit);
+
+  // Add "No location" at the end if there are any
+  if (noLocationCount > 0) {
+    results.push({ location: '__no_location__', count: noLocationCount, isNoLocation: true });
+  }
+
+  return results;
 }
 
 // Normalize a genre by removing "Metal" suffix
@@ -630,6 +647,12 @@ function parseLocationParts(locationStr: string): string[] {
 // Check if a band matches any of the selected location filters
 function bandMatchesLocationFilter(band: BandData, filterLocations: Set<string>): boolean {
   if (filterLocations.size === 0) return true;
+
+  // Check for "No location" filter
+  if (filterLocations.has('__no_location__') && !band.location.trim()) {
+    return true;
+  }
+
   const bandLocations = parseLocationParts(band.location);
   return bandLocations.some(l => filterLocations.has(l));
 }
@@ -1021,9 +1044,9 @@ function renderStats(controls: HTMLElement, resultsContainer: HTMLElement) {
       <div class="bma-stats-title">Top Locations</div>
       <div class="bma-stats-row">
         ${topLocations.map((loc) => `
-          <div class="bma-stat${filterLocations.has(loc.location) ? ' active' : ''}" data-location="${loc.location}">
+          <div class="bma-stat${filterLocations.has(loc.location) ? ' active' : ''}${loc.isNoLocation ? ' no-location' : ''}" data-location="${loc.location}">
             <span class="bma-stat-value">${loc.count.toLocaleString()}</span>
-            <span class="bma-stat-label">${loc.location}</span>
+            <span class="bma-stat-label">${loc.isNoLocation ? 'No location' : loc.location}</span>
           </div>
         `).join('')}
       </div>
