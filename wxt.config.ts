@@ -7,7 +7,7 @@ export default defineConfig({
     version: '1.0.0',
   },
   runner: {
-    startUrls: ['https://www.metal-archives.com/lists/US'],
+    startUrls: ['https://www.metal-archives.com/lists/ZA'],
     chromiumArgs: ['--disable-blink-features=AutomationControlled'],
   },
 });

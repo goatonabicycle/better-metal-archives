@@ -391,6 +391,214 @@ export default defineContentScript({
       .bma-original-hidden {
         display: none !important;
       }
+
+      /* Tabs */
+      .bma-tabs {
+        display: flex;
+        gap: 0;
+        margin-bottom: 12px;
+        border-bottom: 1px solid #333;
+      }
+
+      .bma-tab {
+        padding: 8px 16px;
+        background: transparent;
+        border: none;
+        border-bottom: 2px solid transparent;
+        color: #888;
+        cursor: pointer;
+        font-size: 12px;
+        transition: all 0.15s;
+      }
+
+      .bma-tab:hover {
+        color: #ccc;
+      }
+
+      .bma-tab.active {
+        color: #fff;
+        border-bottom-color: #c9a;
+      }
+
+      .bma-tab-content {
+        display: none;
+      }
+
+      .bma-tab-content.active {
+        display: block;
+      }
+
+      /* Releases panel */
+      .bma-releases-container {
+        max-height: calc(100vh - 200px);
+        overflow-y: auto;
+        padding-right: 10px;
+      }
+
+      .bma-releases-month {
+        margin-bottom: 20px;
+      }
+
+      .bma-releases-month-header {
+        font-size: 13px;
+        font-weight: bold;
+        color: #c9a;
+        padding: 8px 0;
+        border-bottom: 1px solid #333;
+        margin-bottom: 8px;
+        position: sticky;
+        top: 0;
+        background: rgba(0, 0, 0, 0.9);
+      }
+
+      .bma-release-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 6px 0;
+        border-bottom: 1px solid #222;
+      }
+
+      .bma-release-item:last-child {
+        border-bottom: none;
+      }
+
+      .bma-release-date {
+        flex: 0 0 50px;
+        font-size: 11px;
+        color: #666;
+      }
+
+      .bma-release-band {
+        flex: 0 0 180px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .bma-release-band a {
+        color: #fff;
+      }
+
+      .bma-release-title {
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .bma-release-title a {
+        color: #9ac;
+      }
+
+      .bma-release-type {
+        flex: 0 0 80px;
+        font-size: 10px;
+        color: #666;
+        text-align: right;
+      }
+
+      .bma-release-genre {
+        flex: 0 0 150px;
+        font-size: 10px;
+        color: #888;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .bma-releases-nav {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+
+      .bma-releases-nav select {
+        background: #1a1a1a;
+        border: 1px solid #444;
+        color: #ddd;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      .bma-releases-nav select:focus {
+        outline: none;
+        border-color: #666;
+      }
+
+      .bma-releases-summary {
+        color: #888;
+        font-size: 11px;
+        margin-left: auto;
+      }
+
+      .bma-export-btn {
+        background: #2a2a2a;
+        border: 1px solid #444;
+        color: #ccc;
+        padding: 6px 12px;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+
+      .bma-export-btn:hover {
+        background: #333;
+        border-color: #666;
+        color: #fff;
+      }
+
+      .bma-export-btn.copied {
+        background: #1a3a1a;
+        border-color: #6c6;
+        color: #6c6;
+      }
+
+      .bma-releases-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 12px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #333;
+      }
+
+      .bma-release-type-filter {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 8px;
+        background: #1a1a1a;
+        border: 1px solid #333;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+
+      .bma-release-type-filter:hover {
+        background: #252525;
+        border-color: #444;
+      }
+
+      .bma-release-type-filter.active {
+        border-color: #c9a;
+        background: #2a1a2a;
+      }
+
+      .bma-release-type-filter .count {
+        color: #c9a;
+        font-weight: bold;
+      }
+
+      .bma-release-type-filter .label {
+        color: #999;
+      }
+
+      .bma-release-type-filter.active .label {
+        color: #fff;
+      }
     `;
     document.head.appendChild(style);
 
@@ -438,6 +646,19 @@ interface StatusCounts {
   total: number;
 }
 
+interface ReleaseData {
+  bandName: string;
+  bandHtml: string;
+  albumName: string;
+  albumHtml: string;
+  type: string;
+  genre: string;
+  date: string; // Full date string like "January 15th, 2025"
+  year: number;
+  month: number;
+  day: number;
+}
+
 // Global state for band pages
 const appState = {
   allBands: [] as BandData[],
@@ -460,6 +681,16 @@ const labelState = {
   filterSpecialisations: new Set<string>(),
   currentPage: 0,
   pageSize: 100,
+};
+
+// Global state for releases
+const releasesState = {
+  releases: [] as ReleaseData[],
+  selectedYear: new Date().getFullYear(),
+  selectedMonth: 0, // 0 = all months
+  isLoading: false,
+  isLoaded: false,
+  filterTypes: new Set<string>(),
 };
 
 function normalizeStatus(status: string): string {
@@ -508,6 +739,125 @@ async function fetchAllBands(countryCode: string, onProgress?: (loaded: number, 
   return bands;
 }
 
+async function fetchReleasesByCountry(
+  countryCode: string,
+  year: number,
+  onProgress?: (loaded: number, total: number) => void
+): Promise<ReleaseData[]> {
+  const releases: ReleaseData[] = [];
+  let start = 0;
+  const pageSize = 200;
+  let total = Infinity;
+
+  // Build search URL for albums by country and year
+  const baseParams = new URLSearchParams({
+    bandName: '',
+    releaseTitle: '',
+    releaseYearFrom: year.toString(),
+    releaseYearTo: year.toString(),
+    releaseMonthFrom: '',
+    releaseMonthTo: '',
+    releaseType: '',
+    releaseLabelName: '',
+  });
+  baseParams.append('country[]', countryCode);
+
+  while (start < total) {
+    const url = `https://www.metal-archives.com/search/ajax-advanced/searching/albums/?${baseParams.toString()}&sEcho=1&iDisplayStart=${start}&iDisplayLength=${pageSize}`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    total = data.iTotalRecords;
+
+    for (const row of data.aaData) {
+      // Row format: [bandHtml, albumHtml, type, date, genre]
+      // But the advanced search returns: [bandHtml, albumHtml, type, date]
+      const bandMatch = row[0].match(/>([^<]+)</);
+      const bandName = bandMatch ? bandMatch[1] : row[0];
+
+      const albumMatch = row[1].match(/>([^<]+)</);
+      const albumName = albumMatch ? albumMatch[1] : row[1];
+
+      const type = row[2] || '';
+      const dateStr = row[3] || '';
+
+      // Parse date - format is like "January 15th, 2025" or "2025"
+      const { year: parsedYear, month, day } = parseReleaseDate(dateStr, year);
+
+      releases.push({
+        bandName,
+        bandHtml: row[0],
+        albumName,
+        albumHtml: row[1],
+        type,
+        genre: row[4] || '',
+        date: dateStr,
+        year: parsedYear,
+        month,
+        day,
+      });
+    }
+
+    start += pageSize;
+    onProgress?.(Math.min(start, total), total);
+  }
+
+  // Sort by date descending (newest first)
+  releases.sort((a, b) => {
+    if (a.year !== b.year) return b.year - a.year;
+    if (a.month !== b.month) return b.month - a.month;
+    return b.day - a.day;
+  });
+
+  return releases;
+}
+
+function parseReleaseDate(dateStr: string, fallbackYear: number): { year: number; month: number; day: number } {
+  // Patterns:
+  // "January 15th, 2025"
+  // "January 2025"
+  // "2025"
+  const months: Record<string, number> = {
+    january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
+    july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
+  };
+
+  const lower = dateStr.toLowerCase();
+
+  // Try full date pattern
+  const fullMatch = lower.match(/(\w+)\s+(\d+)(?:st|nd|rd|th)?,?\s*(\d{4})/);
+  if (fullMatch) {
+    return {
+      year: parseInt(fullMatch[3]),
+      month: months[fullMatch[1]] || 0,
+      day: parseInt(fullMatch[2]),
+    };
+  }
+
+  // Try month + year pattern
+  const monthYearMatch = lower.match(/(\w+)\s+(\d{4})/);
+  if (monthYearMatch) {
+    return {
+      year: parseInt(monthYearMatch[2]),
+      month: months[monthYearMatch[1]] || 0,
+      day: 0,
+    };
+  }
+
+  // Try year only
+  const yearMatch = dateStr.match(/(\d{4})/);
+  if (yearMatch) {
+    return {
+      year: parseInt(yearMatch[1]),
+      month: 0,
+      day: 0,
+    };
+  }
+
+  return { year: fallbackYear, month: 0, day: 0 };
+}
+
 function countStatuses(items: Array<{ statusNormalized: string }>): StatusCounts {
   const counts: StatusCounts = {
     active: 0,
@@ -547,7 +897,7 @@ function getTopLocations(bands: BandData[], limit = 10): Array<{ location: strin
     }
   }
 
-  const results = Array.from(locationCounts.entries())
+  const results: Array<{ location: string; count: number; isNoLocation?: boolean }> = Array.from(locationCounts.entries())
     .map(([location, count]) => ({ location, count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, limit);
@@ -846,13 +1196,22 @@ function initCountryListPage() {
   controls.className = 'bma-controls';
   controls.innerHTML = `
     <div class="bma-controls-header">Better Metal Archives</div>
-    <div class="bma-loading">Loading all bands...</div>
-    <div class="bma-stats-section bma-status-stats"></div>
-    <div class="bma-stats-section bma-genre-stats"></div>
-    <div class="bma-stats-section bma-location-stats"></div>
-    <div class="bma-filter-row">
-      <input type="text" class="bma-filter-input" placeholder="Search by name..." id="bma-filter-input">
-      <span class="bma-filter-count"></span>
+    <div class="bma-tabs">
+      <button class="bma-tab active" data-tab="bands">Bands</button>
+      <button class="bma-tab" data-tab="releases">Releases</button>
+    </div>
+    <div class="bma-tab-content active" data-tab-content="bands">
+      <div class="bma-loading">Loading all bands...</div>
+      <div class="bma-stats-section bma-status-stats"></div>
+      <div class="bma-stats-section bma-genre-stats"></div>
+      <div class="bma-stats-section bma-location-stats"></div>
+      <div class="bma-filter-row">
+        <input type="text" class="bma-filter-input" placeholder="Search by name..." id="bma-filter-input">
+        <span class="bma-filter-count"></span>
+      </div>
+    </div>
+    <div class="bma-tab-content" data-tab-content="releases">
+      <div class="bma-releases-panel"></div>
     </div>
   `;
 
@@ -868,12 +1227,251 @@ function initCountryListPage() {
       tableWrapper.parentElement?.insertBefore(resultsContainer, tableWrapper);
       controls.classList.add('visible');
       setupFilterLogic(controls, resultsContainer);
+      setupTabs(controls, countryCode);
       loadAllData(countryCode, controls, resultsContainer);
       observer.disconnect();
     }
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
+}
+
+function setupTabs(controls: HTMLElement, countryCode: string) {
+  const tabs = controls.querySelectorAll('.bma-tab');
+  const tabContents = controls.querySelectorAll('.bma-tab-content');
+
+  tabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const tabName = tab.getAttribute('data-tab');
+
+      // Update active tab
+      tabs.forEach((t) => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      // Update active content
+      tabContents.forEach((content) => {
+        if (content.getAttribute('data-tab-content') === tabName) {
+          content.classList.add('active');
+        } else {
+          content.classList.remove('active');
+        }
+      });
+
+      // Hide/show original table and filtered results based on tab
+      const tableWrapper = document.querySelector('#bandListCountry_wrapper');
+      const resultsContainer = document.querySelector('.bma-results-container');
+
+      if (tabName === 'releases') {
+        tableWrapper?.classList.add('bma-original-hidden');
+        resultsContainer?.classList.remove('visible');
+        // Load releases if not loaded yet
+        if (!releasesState.isLoaded && !releasesState.isLoading) {
+          loadReleases(controls, countryCode);
+        }
+      } else {
+        // Restore table visibility based on filter state
+        const hasFilters = appState.filterText || appState.filterStatuses.size > 0 ||
+          appState.filterGenres.size > 0 || appState.filterLocations.size > 0;
+        if (hasFilters) {
+          tableWrapper?.classList.add('bma-original-hidden');
+          resultsContainer?.classList.add('visible');
+        } else {
+          tableWrapper?.classList.remove('bma-original-hidden');
+          resultsContainer?.classList.remove('visible');
+        }
+      }
+    });
+  });
+}
+
+async function loadReleases(controls: HTMLElement, countryCode: string) {
+  const panel = controls.querySelector('.bma-releases-panel');
+  if (!panel) return;
+
+  releasesState.isLoading = true;
+
+  // Show loading with year selector
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 30 }, (_, i) => currentYear - i);
+
+  panel.innerHTML = `
+    <div class="bma-releases-nav">
+      <select id="bma-releases-year">
+        ${years.map((y) => `<option value="${y}"${y === releasesState.selectedYear ? ' selected' : ''}>${y}</option>`).join('')}
+      </select>
+      <span class="bma-loading">Loading releases...</span>
+    </div>
+    <div class="bma-releases-container"></div>
+  `;
+
+  // Set up year change handler
+  const yearSelect = panel.querySelector('#bma-releases-year') as HTMLSelectElement;
+  yearSelect?.addEventListener('change', () => {
+    releasesState.selectedYear = parseInt(yearSelect.value);
+    releasesState.isLoaded = false;
+    loadReleases(controls, countryCode);
+  });
+
+  try {
+    const releases = await fetchReleasesByCountry(countryCode, releasesState.selectedYear, (loaded, total) => {
+      const loadingEl = panel.querySelector('.bma-loading');
+      if (loadingEl) {
+        loadingEl.textContent = `Loading releases... ${loaded.toLocaleString()} / ${total.toLocaleString()}`;
+      }
+    });
+
+    releasesState.releases = releases;
+    releasesState.isLoaded = true;
+    releasesState.isLoading = false;
+
+    renderReleases(panel as HTMLElement);
+  } catch (error) {
+    console.error('[BMA] Failed to load releases:', error);
+    panel.innerHTML = `<div class="bma-loading" style="color: #f87171;">Failed to load releases</div>`;
+    releasesState.isLoading = false;
+  }
+}
+
+function renderReleases(panel: HTMLElement) {
+  const { releases, selectedYear, filterTypes } = releasesState;
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 30 }, (_, i) => currentYear - i);
+  const countryCode = window.location.pathname.split('/').pop() || '';
+
+  // Count release types
+  const typeCounts = new Map<string, number>();
+  for (const release of releases) {
+    const type = release.type || 'Unknown';
+    typeCounts.set(type, (typeCounts.get(type) || 0) + 1);
+  }
+  const sortedTypes = Array.from(typeCounts.entries()).sort((a, b) => b[1] - a[1]);
+
+  // Filter releases by type
+  const filteredReleases = filterTypes.size === 0
+    ? releases
+    : releases.filter((r) => filterTypes.has(r.type || 'Unknown'));
+
+  // Group filtered releases by month
+  const byMonth = new Map<number, ReleaseData[]>();
+  for (const release of filteredReleases) {
+    const month = release.month || 0;
+    if (!byMonth.has(month)) {
+      byMonth.set(month, []);
+    }
+    byMonth.get(month)!.push(release);
+  }
+
+  // Sort months descending
+  const sortedMonths = Array.from(byMonth.keys()).sort((a, b) => b - a);
+
+  const monthNames = ['Unknown', 'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+
+  const summaryText = filterTypes.size > 0
+    ? `${filteredReleases.length.toLocaleString()} of ${releases.length.toLocaleString()} releases`
+    : `${releases.length.toLocaleString()} releases in ${selectedYear}`;
+
+  panel.innerHTML = `
+    <div class="bma-releases-nav">
+      <select id="bma-releases-year">
+        ${years.map((y) => `<option value="${y}"${y === selectedYear ? ' selected' : ''}>${y}</option>`).join('')}
+      </select>
+      <button class="bma-export-btn" id="bma-export-releases">Copy as Text</button>
+      <span class="bma-releases-summary">${summaryText}</span>
+    </div>
+    <div class="bma-releases-filters">
+      ${sortedTypes.map(([type, count]) => `
+        <div class="bma-release-type-filter${filterTypes.has(type) ? ' active' : ''}" data-type="${type}">
+          <span class="count">${count}</span>
+          <span class="label">${type}</span>
+        </div>
+      `).join('')}
+    </div>
+    <div class="bma-releases-container">
+      ${sortedMonths.length === 0 ? '<div style="color: #888; padding: 20px 0;">No releases match the selected filters</div>' : ''}
+      ${sortedMonths.map((month) => `
+        <div class="bma-releases-month">
+          <div class="bma-releases-month-header">${monthNames[month]} ${selectedYear}</div>
+          ${byMonth.get(month)!.map((r) => `
+            <div class="bma-release-item">
+              <div class="bma-release-date">${r.day ? monthNames[r.month].slice(0, 3) + ' ' + r.day : ''}</div>
+              <div class="bma-release-band">${r.bandHtml}</div>
+              <div class="bma-release-title">${r.albumHtml}</div>
+              <div class="bma-release-type">${r.type}</div>
+            </div>
+          `).join('')}
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  // Re-attach year change handler
+  const yearSelect = panel.querySelector('#bma-releases-year') as HTMLSelectElement;
+  yearSelect?.addEventListener('change', () => {
+    releasesState.selectedYear = parseInt(yearSelect.value);
+    releasesState.isLoaded = false;
+    releasesState.filterTypes.clear();
+    loadReleases(document.querySelector('.bma-controls') as HTMLElement, countryCode);
+  });
+
+  // Type filter handlers
+  panel.querySelectorAll('.bma-release-type-filter').forEach((el) => {
+    el.addEventListener('click', () => {
+      const type = el.getAttribute('data-type');
+      if (!type) return;
+
+      if (releasesState.filterTypes.has(type)) {
+        releasesState.filterTypes.delete(type);
+      } else {
+        releasesState.filterTypes.add(type);
+      }
+
+      renderReleases(panel);
+    });
+  });
+
+  // Export button handler
+  const exportBtn = panel.querySelector('#bma-export-releases') as HTMLButtonElement;
+  exportBtn?.addEventListener('click', () => {
+    const text = formatReleasesAsText(filteredReleases, selectedYear, sortedMonths, byMonth, monthNames, countryCode);
+    navigator.clipboard.writeText(text).then(() => {
+      exportBtn.textContent = 'Copied!';
+      exportBtn.classList.add('copied');
+      setTimeout(() => {
+        exportBtn.textContent = 'Copy as Text';
+        exportBtn.classList.remove('copied');
+      }, 2000);
+    });
+  });
+}
+
+function formatReleasesAsText(
+  releases: ReleaseData[],
+  year: number,
+  sortedMonths: number[],
+  byMonth: Map<number, ReleaseData[]>,
+  monthNames: string[],
+  countryCode: string
+): string {
+  const lines: string[] = [];
+
+  lines.push(`${countryCode} Metal Releases - ${year} (${releases.length})`);
+  lines.push('');
+
+  for (const month of sortedMonths) {
+    const monthReleases = byMonth.get(month)!;
+    lines.push(`${monthNames[month]} (${monthReleases.length})`);
+
+    for (const r of monthReleases) {
+      const date = r.day ? `${monthNames[r.month].slice(0, 3)} ${r.day}` : '';
+      const datePart = date ? ` - ${date}` : '';
+      lines.push(`  ${r.bandName} - ${r.albumName} (${r.type})${datePart}`);
+    }
+
+    lines.push('');
+  }
+
+  return lines.join('\n');
 }
 
 async function loadAllData(countryCode: string, controls: HTMLElement, resultsContainer: HTMLElement) {
