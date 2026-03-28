@@ -556,6 +556,188 @@ export default defineContentScript({
         color: #6c6;
       }
 
+      /* Links tab */
+      .bma-links-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .bma-links-run-btn {
+        align-self: flex-start;
+        padding: 8px 16px;
+        background: #1a1a1a;
+        border: 1px solid #555;
+        color: #ccc;
+        cursor: pointer;
+        font-size: 12px;
+      }
+
+      .bma-links-run-btn:hover {
+        background: #252525;
+        border-color: #888;
+        color: #fff;
+      }
+
+      .bma-links-run-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .bma-links-progress {
+        display: none;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .bma-links-progress.visible {
+        display: flex;
+      }
+
+      .bma-links-progress-bar-track {
+        height: 4px;
+        background: #222;
+        border: 1px solid #333;
+      }
+
+      .bma-links-progress-bar-fill {
+        height: 100%;
+        background: #c9a;
+        width: 0%;
+        transition: width 0.2s;
+      }
+
+      .bma-links-progress-label {
+        font-size: 11px;
+        color: #888;
+      }
+
+      .bma-links-results {
+        display: none;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .bma-links-results.visible {
+        display: flex;
+      }
+
+      .bma-links-summary {
+        font-size: 12px;
+        color: #aaa;
+        padding: 8px 0;
+        border-bottom: 1px solid #333;
+      }
+
+      .bma-links-band-row {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        font-size: 12px;
+        padding: 3px 0;
+        border-bottom: 1px solid #222;
+      }
+
+      .bma-links-band-name {
+        color: #ccc;
+        min-width: 180px;
+      }
+
+      .bma-links-band-urls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .bma-links-url {
+        color: #c9a;
+        text-decoration: none;
+        font-size: 11px;
+      }
+
+      .bma-links-url:hover {
+        text-decoration: underline;
+      }
+
+      .bma-links-none {
+        color: #555;
+        font-size: 11px;
+        font-style: italic;
+      }
+
+      .bma-links-filter-row {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .bma-links-platform-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+
+      .bma-links-chip {
+        padding: 3px 9px;
+        background: #1a1a1a;
+        border: 1px solid #333;
+        color: #888;
+        cursor: pointer;
+        font-size: 11px;
+        border-radius: 2px;
+      }
+
+      .bma-links-chip:hover {
+        border-color: #555;
+        color: #ccc;
+      }
+
+      .bma-links-chip.active {
+        background: #2a2a1a;
+        border-color: #c9a;
+        color: #c9a;
+      }
+
+      .bma-links-filter-bottom {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .bma-links-filter-input {
+        padding: 4px 8px;
+        background: #1a1a1a;
+        border: 1px solid #333;
+        color: #ccc;
+        font-size: 12px;
+        width: 180px;
+      }
+
+      .bma-links-toggle {
+        display: inline-flex;
+        gap: 0;
+      }
+
+      .bma-links-toggle button {
+        padding: 4px 10px;
+        background: #1a1a1a;
+        border: 1px solid #333;
+        color: #888;
+        cursor: pointer;
+        font-size: 11px;
+      }
+
+      .bma-links-toggle button.active {
+        background: #2a2a2a;
+        border-color: #666;
+        color: #fff;
+      }
+
+      .bma-links-list {
+        max-height: 65vh;
+        overflow-y: auto;
+      }
+
       .bma-releases-filters {
         display: flex;
         flex-wrap: wrap;
@@ -620,10 +802,16 @@ export default defineContentScript({
 interface BandData {
   name: string;
   nameHtml: string;
+  href: string;
   genre: string;
   location: string;
   status: string;
   statusNormalized: string;
+}
+
+interface BandLink {
+  title: string;
+  url: string;
 }
 
 interface LabelData {
@@ -693,6 +881,17 @@ const releasesState = {
   filterTypes: new Set<string>(),
 };
 
+// Global state for links analysis
+const linksState = {
+  isRunning: false,
+  isComplete: false,
+  progress: 0,
+  total: 0,
+  results: new Map<string, BandLink[]>(),  // href -> links (empty = no links registered)
+  failed: new Set<string>(),               // hrefs where fetch failed
+  bandNames: new Map<string, string>(),    // href -> name
+};
+
 function normalizeStatus(status: string): string {
   const s = status.toLowerCase();
   if (s.includes('active')) return 'active';
@@ -701,6 +900,109 @@ function normalizeStatus(status: string): string {
   if (s.includes('changed')) return 'changed-name';
   if (s.includes('closed')) return 'closed';
   return 'unknown';
+}
+
+function getBandIdFromHref(href: string): string | null {
+  const match = href.match(/\/bands\/[^/?]+\/(\d+)/);
+  return match ? match[1] : null;
+}
+
+// Returns null on fetch failure (distinct from empty array = no links found)
+async function fetchBandLinks(bandId: string): Promise<BandLink[] | null> {
+  const url = `https://www.metal-archives.com/link/ajax-list/type/band/id/${bandId}`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    });
+  } catch {
+    return null;
+  }
+
+  if (!response.ok) return null;
+
+  const text = await response.text();
+
+  if (!text || text.trim() === '' || text.includes('cloudflare') || text.includes('error-1015') || text.includes('Just a moment')) {
+    return null;
+  }
+
+  // Try JSON first (DataTables format)
+  try {
+    const json = JSON.parse(text) as { aaData?: string[][] };
+    if (Array.isArray(json.aaData)) {
+      return json.aaData.flatMap((row) => {
+        const match = row[0]?.match(/href=['"]([^'"]+)['"]/);
+        const titleMatch = row[0]?.match(/>([^<]+)</);
+        const href = match?.[1] || '';
+        const title = titleMatch?.[1]?.trim() || href;
+        if (href.startsWith('http') && !href.includes('metal-archives.com')) {
+          return [{ title, url: href }];
+        }
+        return [];
+      });
+    }
+  } catch {
+    // Not JSON — fall through to HTML parsing
+  }
+
+  // HTML table parsing
+  const doc = new DOMParser().parseFromString(text, 'text/html');
+  const anchors = doc.querySelectorAll('a[href]');
+  const links: BandLink[] = [];
+
+  anchors.forEach((a) => {
+    const href = a.getAttribute('href') || '';
+    const title = a.textContent?.trim() || href;
+    if (href.startsWith('http') && !href.includes('metal-archives.com')) {
+      links.push({ title, url: href });
+    }
+  });
+
+  return links;
+}
+
+async function runLinksAnalysis(
+  bands: BandData[],
+  onProgress: (done: number, total: number) => void
+): Promise<void> {
+  const activeBands = bands.filter((b) => b.statusNormalized === 'active' && b.href);
+  linksState.total = activeBands.length;
+  linksState.progress = 0;
+  linksState.results.clear();
+  linksState.failed.clear();
+  linksState.bandNames.clear();
+
+  const CONCURRENCY = 1;
+  const DELAY_MS = 500;
+
+  let index = 0;
+
+  async function worker(): Promise<void> {
+    while (index < activeBands.length) {
+      const band = activeBands[index++];
+      const bandId = getBandIdFromHref(band.href);
+
+      if (bandId) {
+        const links = await fetchBandLinks(bandId);
+        linksState.bandNames.set(band.href, band.name);
+        if (links === null) {
+          linksState.failed.add(band.href);
+        } else {
+          linksState.results.set(band.href, links);
+        }
+      }
+
+      linksState.progress++;
+      onProgress(linksState.progress, linksState.total);
+      await new Promise((resolve) => setTimeout(resolve, DELAY_MS));
+    }
+  }
+
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  linksState.isComplete = true;
+  linksState.isRunning = false;
 }
 
 async function fetchAllBands(countryCode: string, onProgress?: (loaded: number, total: number) => void): Promise<BandData[]> {
@@ -720,11 +1022,14 @@ async function fetchAllBands(countryCode: string, onProgress?: (loaded: number, 
     for (const row of data.aaData) {
       const nameMatch = row[0].match(/>([^<]+)</);
       const name = nameMatch ? nameMatch[1] : row[0];
+      const hrefMatch = row[0].match(/href='([^']+)'/);
+      const href = hrefMatch ? hrefMatch[1] : '';
       const status = row[3];
 
       bands.push({
         name,
         nameHtml: row[0],
+        href,
         genre: row[1],
         location: row[2],
         status,
@@ -1199,6 +1504,7 @@ function initCountryListPage() {
     <div class="bma-tabs">
       <button class="bma-tab active" data-tab="bands">Bands</button>
       <button class="bma-tab" data-tab="releases">Releases</button>
+      <button class="bma-tab" data-tab="links">Links</button>
     </div>
     <div class="bma-tab-content active" data-tab-content="bands">
       <div class="bma-loading">Loading all bands...</div>
@@ -1212,6 +1518,40 @@ function initCountryListPage() {
     </div>
     <div class="bma-tab-content" data-tab-content="releases">
       <div class="bma-releases-panel"></div>
+    </div>
+    <div class="bma-tab-content" data-tab-content="links">
+      <div class="bma-links-panel">
+        <button class="bma-links-run-btn">Fetch links for active bands</button>
+        <div class="bma-links-progress">
+          <div class="bma-links-progress-bar-track">
+            <div class="bma-links-progress-bar-fill"></div>
+          </div>
+          <div class="bma-links-progress-label"></div>
+        </div>
+        <div class="bma-links-results">
+          <div class="bma-links-summary"></div>
+          <div class="bma-links-filter-row">
+            <div class="bma-links-platform-chips">
+              <button class="bma-links-chip" data-platform="bandcamp.com">Bandcamp</button>
+              <button class="bma-links-chip" data-platform="spotify.com">Spotify</button>
+              <button class="bma-links-chip" data-platform="facebook.com">Facebook</button>
+              <button class="bma-links-chip" data-platform="youtube.com">YouTube</button>
+              <button class="bma-links-chip" data-platform="instagram.com">Instagram</button>
+              <button class="bma-links-chip" data-platform="soundcloud.com">SoundCloud</button>
+              <button class="bma-links-chip" data-platform="twitter.com">Twitter/X</button>
+            </div>
+            <div class="bma-links-filter-bottom">
+              <input type="text" class="bma-links-filter-input" placeholder="Custom domain filter...">
+              <div class="bma-links-toggle">
+                <button class="active" data-links-view="all">All</button>
+                <button data-links-view="with">Has links</button>
+                <button data-links-view="without">No links</button>
+              </div>
+            </div>
+          </div>
+          <div class="bma-links-list"></div>
+        </div>
+      </div>
     </div>
   `;
 
@@ -1228,6 +1568,7 @@ function initCountryListPage() {
       controls.classList.add('visible');
       setupFilterLogic(controls, resultsContainer);
       setupTabs(controls, countryCode);
+      setupLinksPanel(controls);
       loadAllData(countryCode, controls, resultsContainer);
       observer.disconnect();
     }
@@ -1268,6 +1609,9 @@ function setupTabs(controls: HTMLElement, countryCode: string) {
         if (!releasesState.isLoaded && !releasesState.isLoading) {
           loadReleases(controls, countryCode);
         }
+      } else if (tabName === 'links') {
+        tableWrapper?.classList.add('bma-original-hidden');
+        resultsContainer?.classList.remove('visible');
       } else {
         // Restore table visibility based on filter state
         const hasFilters = appState.filterText || appState.filterStatuses.size > 0 ||
@@ -1279,6 +1623,137 @@ function setupTabs(controls: HTMLElement, countryCode: string) {
           tableWrapper?.classList.remove('bma-original-hidden');
           resultsContainer?.classList.remove('visible');
         }
+      }
+    });
+  });
+}
+
+function renderLinksResults(panel: Element, domainFilter: string, view: string) {
+  const list = panel.querySelector('.bma-links-list');
+  if (!list) return;
+
+  const entries = Array.from(linksState.results.entries());
+  const failedEntries = Array.from(linksState.failed);
+
+  const withLinks = entries.filter(([, links]) => links.length > 0).length;
+  const withoutLinks = entries.filter(([, links]) => links.length === 0).length;
+  const failedCount = failedEntries.length;
+
+  const summary = panel.querySelector('.bma-links-summary');
+  if (summary) {
+    summary.textContent = `${withLinks} have links · ${withoutLinks} have none · ${failedCount > 0 ? `${failedCount} failed to load · ` : ''}${entries.length + failedCount} total active bands`;
+  }
+
+  // Build display rows: results + failed (unless filtered out)
+  const rows: Array<{ href: string; links: BandLink[] | null }> = [
+    ...entries.map(([href, links]) => ({ href, links })),
+    ...(view !== 'with' ? failedEntries.map((href) => ({ href, links: null })) : []),
+  ];
+
+  const filtered = rows.filter(({ href, links }) => {
+    if (view === 'with' && (links === null || links.length === 0)) return false;
+    if (view === 'without' && links !== null && links.length > 0) return false;
+    if (domainFilter && links) {
+      return links.some((l) => l.url.toLowerCase().includes(domainFilter));
+    }
+    return true;
+  });
+
+  list.innerHTML = filtered.map(({ href, links }) => {
+    const name = linksState.bandNames.get(href) || href;
+    const fullUrl = href.startsWith('http') ? href : `https://www.metal-archives.com${href}`;
+    let urlsHtml: string;
+    if (links === null) {
+      urlsHtml = `<span class="bma-links-none" style="color:#854">failed to load</span>`;
+    } else if (links.length > 0) {
+      urlsHtml = links.map((l) => `<a class="bma-links-url" href="${l.url}" target="_blank" rel="noopener noreferrer">${l.title}</a>`).join('');
+    } else {
+      urlsHtml = `<span class="bma-links-none">no links</span>`;
+    }
+    return `<div class="bma-links-band-row">
+      <a class="bma-links-band-name" href="${fullUrl}" target="_blank" rel="noopener noreferrer">${name}</a>
+      <div class="bma-links-band-urls">${urlsHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+function setupLinksPanel(controls: HTMLElement) {
+  const panel = controls.querySelector('[data-tab-content="links"] .bma-links-panel');
+  if (!panel) return;
+
+  const runBtn = panel.querySelector('.bma-links-run-btn') as HTMLButtonElement;
+  const progress = panel.querySelector('.bma-links-progress') as HTMLElement;
+  const progressFill = panel.querySelector('.bma-links-progress-bar-fill') as HTMLElement;
+  const progressLabel = panel.querySelector('.bma-links-progress-label') as HTMLElement;
+  const results = panel.querySelector('.bma-links-results') as HTMLElement;
+  const filterInput = panel.querySelector('.bma-links-filter-input') as HTMLInputElement;
+  const toggleBtns = panel.querySelectorAll('.bma-links-toggle button');
+  const chips = panel.querySelectorAll('.bma-links-chip');
+
+  let currentView = 'all';
+
+  chips.forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const platform = chip.getAttribute('data-platform') || '';
+      const isActive = chip.classList.contains('active');
+
+      // Deactivate all chips
+      chips.forEach((c) => c.classList.remove('active'));
+
+      if (isActive) {
+        // Toggle off — clear filter
+        filterInput.value = '';
+      } else {
+        chip.classList.add('active');
+        filterInput.value = platform;
+      }
+
+      if (linksState.isComplete) {
+        renderLinksResults(panel, filterInput.value.trim().toLowerCase(), currentView);
+      }
+    });
+  });
+
+  filterInput.addEventListener('input', () => {
+    // If user types manually, deactivate chips
+    chips.forEach((c) => c.classList.remove('active'));
+    if (linksState.isComplete) {
+      renderLinksResults(panel, filterInput.value.trim().toLowerCase(), currentView);
+    }
+  });
+
+  runBtn.addEventListener('click', async () => {
+    if (linksState.isRunning) return;
+    if (appState.allBands.length === 0) {
+      runBtn.textContent = 'Bands not loaded yet — try again shortly';
+      return;
+    }
+
+    linksState.isRunning = true;
+    linksState.isComplete = false;
+    runBtn.disabled = true;
+    progress.classList.add('visible');
+    results.classList.remove('visible');
+
+    await runLinksAnalysis(appState.allBands, (done, total) => {
+      const pct = total > 0 ? (done / total) * 100 : 0;
+      progressFill.style.width = `${pct}%`;
+      progressLabel.textContent = `Fetching ${done} / ${total} active bands...`;
+    });
+
+    progress.classList.remove('visible');
+    results.classList.add('visible');
+    renderLinksResults(panel, filterInput.value.trim().toLowerCase(), currentView);
+  });
+
+
+  toggleBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      currentView = btn.getAttribute('data-links-view') || 'all';
+      toggleBtns.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (linksState.isComplete) {
+        renderLinksResults(panel, filterInput.value.trim().toLowerCase(), currentView);
       }
     });
   });

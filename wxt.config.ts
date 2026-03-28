@@ -5,6 +5,16 @@ export default defineConfig({
     name: 'Better Metal Archives',
     description: 'Filter Metal Archives by genre, location, and status. Hover over any band for a quick preview.',
     version: '1.0.0',
+    browser_specific_settings: {
+      gecko: {
+        id: 'better-metal-archives@extension',
+        strict_min_version: '109.0',
+        data_collection_permissions: {
+          required: ['none'],
+          optional: [],
+        },
+      } as any,
+    },
   },
   runner: {
     startUrls: ['https://www.metal-archives.com/lists/ZA'],
