@@ -6,83 +6,29 @@ const sharp = require('sharp');
 const EXTENSION_PATH = path.resolve(__dirname, '../.output/chrome-mv3');
 const META_PATH = path.resolve(__dirname, '../meta');
 
-async function waitForExtensionUI(page) {
-  console.log('Waiting for extension UI to appear...');
-  await page.waitForSelector('.bma-controls', { timeout: 60000 });
-  console.log('Extension UI found!');
+async function takeScreenshot(page, name, width, height, cropOptions) {
+  const tempPath = path.join(META_PATH, `_temp_${name}`);
+  const filePath = path.join(META_PATH, name);
 
-  await page.waitForSelector('.bma-stat', { timeout: 120000 });
-  console.log('Filter stats loaded!');
+  await page.setViewport({ width: 1600, height: 1000, deviceScaleFactor: 1 });
+  await new Promise(r => setTimeout(r, 500));
+  await page.screenshot({ path: tempPath, type: 'png' });
 
-  await new Promise((r) => setTimeout(r, 2000));
-}
-
-async function takeElementScreenshot(page, selector, outputName, targetWidth, targetHeight) {
-  const filePath = path.join(META_PATH, outputName);
-  const tempPath = path.join(META_PATH, `_temp_${outputName}`);
-
-  // Use a wide viewport
-  await page.setViewport({ width: 1600, height: 1200, deviceScaleFactor: 1 });
-  await new Promise((r) => setTimeout(r, 500));
-
-  // Screenshot just the element
-  const element = await page.$(selector);
-  if (!element) {
-    console.error(`Element ${selector} not found!`);
-    return;
-  }
-
-  await element.screenshot({ path: tempPath, type: 'png' });
-
-  // Get element dimensions
-  const box = await element.boundingBox();
-  const elementWidth = Math.round(box.width);
-  const elementHeight = Math.round(box.height);
-
-  // Create the final image with padding/resizing
-  // Add dark background padding to reach target size
-  const img = sharp(tempPath);
-
-  if (elementWidth >= targetWidth && elementHeight >= targetHeight) {
-    // Element is big enough, just resize/crop
-    await img.resize(targetWidth, targetHeight, { fit: 'cover', position: 'top' }).toFile(filePath);
-  } else {
-    // Element is smaller, center it on a dark background
-    await img
-      .resize(Math.min(elementWidth, targetWidth), Math.min(elementHeight, targetHeight), { fit: 'inside' })
-      .extend({
-        top: Math.max(0, Math.floor((targetHeight - Math.min(elementHeight, targetHeight)) / 2)),
-        bottom: Math.max(0, Math.ceil((targetHeight - Math.min(elementHeight, targetHeight)) / 2)),
-        left: Math.max(0, Math.floor((targetWidth - Math.min(elementWidth, targetWidth)) / 2)),
-        right: Math.max(0, Math.ceil((targetWidth - Math.min(elementWidth, targetWidth)) / 2)),
-        background: { r: 20, g: 20, b: 20, alpha: 1 },
-      })
-      .toFile(filePath);
-  }
+  await sharp(tempPath)
+    .extract({
+      left: cropOptions.left || 180,
+      top: cropOptions.top || 70,
+      width: cropOptions.width || 1200,
+      height: cropOptions.height || 750,
+    })
+    .resize(width, height, { fit: 'fill' })
+    .toFile(filePath);
 
   fs.unlinkSync(tempPath);
-  console.log(`Saved: ${outputName} (${targetWidth}x${targetHeight}) - focused on extension UI`);
-}
-
-async function takeFullPageScreenshot(page, outputName, width, height) {
-  const filePath = path.join(META_PATH, outputName);
-
-  await page.setViewport({ width, height, deviceScaleFactor: 1 });
-  await new Promise((r) => setTimeout(r, 500));
-  await page.screenshot({ path: filePath, type: 'png' });
-
-  console.log(`Saved: ${outputName} (${width}x${height})`);
+  console.log(`Saved: ${name}`);
 }
 
 async function main() {
-  console.log('Launching Chrome with extension...');
-  console.log(`Extension path: ${EXTENSION_PATH}`);
-
-  if (!fs.existsSync(EXTENSION_PATH)) {
-    console.error('Extension not built! Run "npm run build" first.');
-    process.exit(1);
-  }
-
   const browser = await puppeteer.launch({
     headless: false,
     args: [
@@ -90,68 +36,89 @@ async function main() {
       `--load-extension=${EXTENSION_PATH}`,
       '--disable-blink-features=AutomationControlled',
       '--no-first-run',
-      '--no-default-browser-check',
     ],
     defaultViewport: null,
   });
 
-  try {
-    const page = await browser.newPage();
+  const page = await browser.newPage();
+  await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
 
-    await page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    );
+  console.log('Navigating...');
+  await page.goto('https://www.metal-archives.com/lists/ZA', { waitUntil: 'networkidle2', timeout: 120000 });
 
-    console.log('Navigating to Metal Archives...');
-    await page.goto('https://www.metal-archives.com/lists/ZA', {
-      waitUntil: 'networkidle2',
-      timeout: 60000,
-    });
+  // One patient wait for Cloudflare + extension
+  console.log('Waiting for page and extension to load...');
+  await page.waitForSelector('.bma-controls', { timeout: 120000 });
+  await page.waitForSelector('.bma-stat', { timeout: 60000 });
+  console.log('Ready!');
 
-    const pageContent = await page.content();
-    if (pageContent.includes('Checking your browser') || pageContent.includes('challenge-platform')) {
-      console.log('Cloudflare detected. Waiting for it to pass...');
-      await new Promise((r) => setTimeout(r, 10000));
-    }
+  // 1. FILTERING
+  console.log('\n1. Filtering screenshot...');
+  await page.click('.bma-stat[data-status="active"]');
+  await new Promise(r => setTimeout(r, 500));
+  await page.click('.bma-stat[data-genre="Death"]');
+  await new Promise(r => setTimeout(r, 1000));
+  await takeScreenshot(page, 'upload_filtering_1280x800.png', 1280, 800, {});
+  await takeScreenshot(page, 'upload_filtering_640x400.png', 640, 400, {});
 
-    await waitForExtensionUI(page);
+  // 2. HOVER on Vulvodynia
+  console.log('\n2. Hover screenshot (Vulvodynia)...');
+  // Clear filters
+  await page.evaluate(() => document.querySelector('.bma-clear-btn')?.click());
+  await new Promise(r => setTimeout(r, 1000));
 
-    // Click some filters to show the extension in action
-    console.log('Applying filters to showcase functionality...');
-
-    // Click "Active" status
-    const activeBtn = await page.$('.bma-stat[data-status="Active"]');
-    if (activeBtn) {
-      await activeBtn.click();
-      await new Promise((r) => setTimeout(r, 500));
-    }
-
-    // Click a genre (e.g., "Death")
-    const deathGenre = await page.$('.bma-stat[data-genre="Death"]');
-    if (deathGenre) {
-      await deathGenre.click();
-      await new Promise((r) => setTimeout(r, 500));
-    }
-
-    await new Promise((r) => setTimeout(r, 1000));
-
-    // Take promo images focused on the extension panel
-    console.log('\nTaking promo images focused on extension UI...');
-    await takeElementScreenshot(page, '.bma-controls', 'promo-small-440x280.png', 440, 280);
-    await takeElementScreenshot(page, '.bma-controls', 'promo-marquee-1400x560.png', 1400, 560);
-
-    // Take full page screenshots showing extension in context
-    console.log('\nTaking full page screenshots...');
-    await takeFullPageScreenshot(page, 'screenshot-1280x800.png', 1280, 800);
-    await takeFullPageScreenshot(page, 'screenshot-640x400.png', 640, 400);
-
-    console.log('\nDone! Screenshots saved to:', META_PATH);
-
-    console.log('\nBrowser will stay open for 10 seconds for inspection...');
-    await new Promise((r) => setTimeout(r, 10000));
-  } finally {
-    await browser.close();
+  // Type in search box
+  const searchInput = await page.$('#bma-filter-input');
+  if (searchInput) {
+    await searchInput.click();
+    await searchInput.type('Vulvodynia', { delay: 50 });
+    await new Promise(r => setTimeout(r, 1500));
   }
+
+  // Debug: check what's visible
+  const visible = await page.evaluate(() => {
+    const links = document.querySelectorAll('.bma-results-container a[href*="/bands/"]');
+    return Array.from(links).slice(0, 3).map(a => a.textContent);
+  });
+  console.log('Visible bands:', visible);
+
+  const bandLink = await page.$('.bma-results-container a[href*="/bands/"]');
+  if (bandLink) {
+    const name = await page.evaluate(el => el.textContent, bandLink);
+    console.log(`Hovering over: ${name}`);
+    await bandLink.hover();
+    await page.waitForSelector('.bma-preview-genre', { timeout: 15000 });
+    await new Promise(r => setTimeout(r, 2000));
+    await takeScreenshot(page, 'upload_hover_1280x800.png', 1280, 800, {});
+    await takeScreenshot(page, 'upload_hover_640x400.png', 640, 400, {});
+  } else {
+    console.log('No band found!');
+  }
+  await page.mouse.move(0, 0);
+
+  // 3. RELEASES
+  console.log('\n3. Releases screenshot...');
+  await page.evaluate(() => document.querySelector('.bma-tab:last-child')?.click());
+  await page.waitForSelector('.bma-releases-container', { timeout: 30000 });
+  await new Promise(r => setTimeout(r, 5000));
+  await page.evaluate(() => {
+    const sel = document.querySelector('#bma-releases-year');
+    if (sel) { sel.value = '2025'; sel.dispatchEvent(new Event('change', { bubbles: true })); }
+  });
+  await new Promise(r => setTimeout(r, 8000));
+  await takeScreenshot(page, 'upload_releases_1280x800.png', 1280, 800, {});
+  await takeScreenshot(page, 'upload_releases_640x400.png', 640, 400, {});
+
+  // 4. PROMO
+  console.log('\n4. Promo images...');
+  await page.evaluate(() => document.querySelector('.bma-tab:first-child')?.click());
+  await new Promise(r => setTimeout(r, 1000));
+  await takeScreenshot(page, 'upload_1400x560.png', 1400, 560, { height: 520 });
+  await takeScreenshot(page, 'upload_440x280.png', 440, 280, { width: 900, height: 500 });
+
+  console.log('\nDone! Browser stays open for 30s...');
+  await new Promise(r => setTimeout(r, 30000));
+  await browser.close();
 }
 
 main().catch(console.error);
