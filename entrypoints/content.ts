@@ -855,6 +855,10 @@ const appState = {
   filterStatuses: new Set<string>(),
   filterGenres: new Set<string>(),
   filterLocations: new Set<string>(),
+  filterRecentYears: null as number | null,
+  recentBandIds: null as Set<string> | null,
+  recentYearsLoading: false,
+  countryCode: '',
   currentPage: 0,
   pageSize: 100,
   isFiltering: false,
@@ -1042,6 +1046,32 @@ async function fetchAllBands(countryCode: string, onProgress?: (loaded: number, 
   }
 
   return bands;
+}
+
+async function fetchRecentBandIds(countryCode: string, years: number): Promise<Set<string>> {
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - years * 365 * 24 * 60 * 60 * 1000);
+  const currentYear = now.getFullYear();
+  const cutoffYear = cutoff.getFullYear();
+  const bandIds = new Set<string>();
+
+  for (let y = currentYear; y >= cutoffYear; y--) {
+    try {
+      const releases = await fetchReleasesByCountry(countryCode, y);
+      for (const release of releases) {
+        const releaseDate = release.day
+          ? new Date(release.year, release.month - 1, release.day)
+          : new Date(release.year, release.month - 1, 1);
+        if (releaseDate < cutoff) continue;
+        const match = release.bandHtml.match(/\/bands\/[^/?]+\/(\d+)/);
+        if (match) bandIds.add(match[1]);
+      }
+    } catch {
+      // skip failed year
+    }
+  }
+
+  return bandIds;
 }
 
 async function fetchReleasesByCountry(
@@ -1329,32 +1359,31 @@ function getTopGenres(bands: BandData[], limit = 10): Array<{ genre: string; cou
 }
 
 function applyFilters(): BandData[] {
-  const { allBands, filterText, filterStatuses, filterGenres, filterLocations } = appState;
+  const { allBands, filterText, filterStatuses, filterGenres, filterLocations, recentBandIds } = appState;
 
   return allBands.filter((band) => {
-    // Text filter
     const textMatch = !filterText ||
       band.name.toLowerCase().includes(filterText) ||
       band.genre.toLowerCase().includes(filterText) ||
       band.location.toLowerCase().includes(filterText);
 
-    // Status filter (OR within statuses)
     const statusMatch = filterStatuses.size === 0 ||
       filterStatuses.has(band.statusNormalized);
 
-    // Genre filter (OR within genres)
     const genreMatch = bandMatchesGenreFilter(band, filterGenres);
 
-    // Location filter (OR within locations)
     const locationMatch = bandMatchesLocationFilter(band, filterLocations);
 
-    return textMatch && statusMatch && genreMatch && locationMatch;
+    const recentMatch = !recentBandIds ||
+      recentBandIds.has(getBandIdFromHref(band.href) ?? '');
+
+    return textMatch && statusMatch && genreMatch && locationMatch && recentMatch;
   });
 }
 
 function renderFilteredResults(container: HTMLElement) {
-  const { filteredBands, currentPage, pageSize, filterText, filterStatuses, filterGenres, filterLocations } = appState;
-  const isFiltering = filterText || filterStatuses.size > 0 || filterGenres.size > 0 || filterLocations.size > 0;
+  const { filteredBands, currentPage, pageSize, filterText, filterStatuses, filterGenres, filterLocations, filterRecentYears } = appState;
+  const isFiltering = filterText || filterStatuses.size > 0 || filterGenres.size > 0 || filterLocations.size > 0 || filterRecentYears !== null;
 
   if (!isFiltering) {
     container.classList.remove('visible');
@@ -1375,6 +1404,7 @@ function renderFilteredResults(container: HTMLElement) {
   if (filterGenres.size > 0) activeFilters.push(`Genre: ${Array.from(filterGenres).join(' or ')}`);
   if (filterLocations.size > 0) activeFilters.push(`Location: ${Array.from(filterLocations).join(' or ')}`);
   if (filterStatuses.size > 0) activeFilters.push(`Status: ${Array.from(filterStatuses).join(' or ')}`);
+  if (filterRecentYears !== null) activeFilters.push(`Released in last ${filterRecentYears}yr`);
   if (filterText) activeFilters.push(`"${filterText}"`);
   const filtersDisplay = activeFilters.length > 0 ? ` — ${activeFilters.join(' + ')}` : '';
 
@@ -1418,6 +1448,8 @@ function renderFilteredResults(container: HTMLElement) {
     appState.filterStatuses.clear();
     appState.filterGenres.clear();
     appState.filterLocations.clear();
+    appState.filterRecentYears = null;
+    appState.recentBandIds = null;
     appState.currentPage = 0;
 
     const input = document.getElementById('bma-filter-input') as HTMLInputElement;
@@ -1509,6 +1541,7 @@ function initCountryListPage() {
     <div class="bma-tab-content active" data-tab-content="bands">
       <div class="bma-loading">Loading all bands...</div>
       <div class="bma-stats-section bma-status-stats"></div>
+      <div class="bma-stats-section bma-recent-stats"></div>
       <div class="bma-stats-section bma-genre-stats"></div>
       <div class="bma-stats-section bma-location-stats"></div>
       <div class="bma-filter-row">
@@ -1964,6 +1997,7 @@ async function loadAllData(countryCode: string, controls: HTMLElement, resultsCo
 
     appState.allBands = bands;
     appState.filteredBands = bands;
+    appState.countryCode = countryCode;
 
     // Initial render of stats
     renderStats(controls, resultsContainer);
@@ -1977,11 +2011,13 @@ async function loadAllData(countryCode: string, controls: HTMLElement, resultsCo
 }
 
 function renderStats(controls: HTMLElement, resultsContainer: HTMLElement) {
-  const { allBands, filteredBands, filterStatuses, filterGenres, filterLocations } = appState;
-  const hasFilters = filterStatuses.size > 0 || filterGenres.size > 0 || filterLocations.size > 0 || appState.filterText;
+  const { allBands, filteredBands, filterStatuses, filterGenres, filterLocations, recentBandIds } = appState;
+  const hasFilters = filterStatuses.size > 0 || filterGenres.size > 0 || filterLocations.size > 0 || appState.filterText || recentBandIds !== null;
+
+  const recentMatch = (band: BandData) => !recentBandIds || recentBandIds.has(getBandIdFromHref(band.href) ?? '');
 
   // Calculate counts based on filtered data (excluding the filter type being counted)
-  // For status: count from bands filtered by genres + locations + text only
+  // For status: count from bands filtered by genres + locations + text + recent only
   const bandsForStatusCount = allBands.filter((band) => {
     const textMatch = !appState.filterText ||
       band.name.toLowerCase().includes(appState.filterText) ||
@@ -1989,10 +2025,10 @@ function renderStats(controls: HTMLElement, resultsContainer: HTMLElement) {
       band.location.toLowerCase().includes(appState.filterText);
     const genreMatch = bandMatchesGenreFilter(band, filterGenres);
     const locationMatch = bandMatchesLocationFilter(band, filterLocations);
-    return textMatch && genreMatch && locationMatch;
+    return textMatch && genreMatch && locationMatch && recentMatch(band);
   });
 
-  // For genres: count from bands filtered by statuses + locations + text only
+  // For genres: count from bands filtered by statuses + locations + text + recent only
   const bandsForGenreCount = allBands.filter((band) => {
     const textMatch = !appState.filterText ||
       band.name.toLowerCase().includes(appState.filterText) ||
@@ -2001,10 +2037,10 @@ function renderStats(controls: HTMLElement, resultsContainer: HTMLElement) {
     const statusMatch = filterStatuses.size === 0 ||
       filterStatuses.has(band.statusNormalized);
     const locationMatch = bandMatchesLocationFilter(band, filterLocations);
-    return textMatch && statusMatch && locationMatch;
+    return textMatch && statusMatch && locationMatch && recentMatch(band);
   });
 
-  // For locations: count from bands filtered by statuses + genres + text only
+  // For locations: count from bands filtered by statuses + genres + text + recent only
   const bandsForLocationCount = allBands.filter((band) => {
     const textMatch = !appState.filterText ||
       band.name.toLowerCase().includes(appState.filterText) ||
@@ -2013,7 +2049,7 @@ function renderStats(controls: HTMLElement, resultsContainer: HTMLElement) {
     const statusMatch = filterStatuses.size === 0 ||
       filterStatuses.has(band.statusNormalized);
     const genreMatch = bandMatchesGenreFilter(band, filterGenres);
-    return textMatch && statusMatch && genreMatch;
+    return textMatch && statusMatch && genreMatch && recentMatch(band);
   });
 
   const statusCounts = countStatuses(bandsForStatusCount);
@@ -2063,6 +2099,52 @@ function renderStats(controls: HTMLElement, resultsContainer: HTMLElement) {
           appState.filterStatuses.delete(status);
         } else {
           appState.filterStatuses.add(status);
+        }
+
+        appState.currentPage = 0;
+        appState.filteredBands = applyFilters();
+        updateFilterCount();
+        renderStats(controls, resultsContainer);
+        renderFilteredResults(resultsContainer);
+      });
+    });
+  }
+
+  // Render recent release filter
+  const recentStatsEl = controls.querySelector('.bma-recent-stats');
+  if (recentStatsEl) {
+    const { filterRecentYears, recentYearsLoading } = appState;
+    recentStatsEl.innerHTML = `
+      <div class="bma-stats-title">Recent Release</div>
+      <div class="bma-stats-row">
+        ${[1, 5, 10].map((y) => `
+          <div class="bma-stat${filterRecentYears === y ? ' active' : ''}" data-recent-years="${y}">
+            ${recentYearsLoading && filterRecentYears === y
+              ? `<span class="bma-stat-value">...</span><span class="bma-stat-label">loading</span>`
+              : `<span class="bma-stat-value">${y}yr</span><span class="bma-stat-label">last ${y === 1 ? 'year' : y + ' years'}</span>`
+            }
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    recentStatsEl.querySelectorAll('.bma-stat[data-recent-years]').forEach((el) => {
+      el.addEventListener('click', async () => {
+        const years = Number(el.getAttribute('data-recent-years'));
+        if (appState.recentYearsLoading) return;
+
+        if (appState.filterRecentYears === years) {
+          // Toggle off
+          appState.filterRecentYears = null;
+          appState.recentBandIds = null;
+        } else {
+          appState.filterRecentYears = years;
+          appState.recentBandIds = null;
+          appState.recentYearsLoading = true;
+          renderStats(controls, resultsContainer);
+
+          appState.recentBandIds = await fetchRecentBandIds(appState.countryCode, years);
+          appState.recentYearsLoading = false;
         }
 
         appState.currentPage = 0;
